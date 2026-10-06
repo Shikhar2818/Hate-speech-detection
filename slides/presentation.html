@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hate Speech Detection through XAI and Reward-Optimized LLMs</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #38bdf8;
+      --accent2: #a78bfa;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", system-ui, sans-serif; }
+    .deck { height: 100vh; overflow-y: scroll; scroll-snap-type: y mandatory; }
+    section {
+      min-height: 100vh;
+      scroll-snap-align: start;
+      padding: 64px 10vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-bottom: 1px solid #334155;
+    }
+    h1 { font-size: 2.4rem; margin: 0 0 12px; }
+    h2 { font-size: 2rem; color: var(--accent); margin: 0 0 24px; }
+    p, li { font-size: 1.15rem; line-height: 1.55; color: var(--text); }
+    .muted { color: var(--muted); }
+    .pill { display: inline-block; background: #0ea5e933; color: var(--accent); padding: 6px 12px; border-radius: 999px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .card { background: var(--card); padding: 18px; border-radius: 16px; border: 1px solid #334155; }
+    code, .eq { font-family: Consolas, monospace; color: #fbbf24; }
+    .footer { margin-top: 28px; color: var(--muted); font-size: 0.95rem; }
+    kbd { background: #334155; padding: 2px 8px; border-radius: 6px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section>
+      <div class="pill">Bennett University · NLP Project</div>
+      <h1>Hate Speech Detection through Explainable AI and Reward-Optimized LLMs</h1>
+      <p class="muted">Instructor: Dr. Pradeepika Verma · N2-WS-062 · pradeepika.verma@bennett.edu.in</p>
+      <p>An interpretable, multilingual, optionally multimodal moderation system that classifies posts and explains why.</p>
+      <div class="footer">Scroll or use PageDown · 12 slides</div>
+    </section>
+
+    <section>
+      <h2>Motivation</h2>
+      <div class="grid">
+        <div class="card">Social platforms amplify identity-directed abuse at a speed humans cannot moderate alone.</div>
+        <div class="card">Lexical classifiers miss sarcasm, code-mixing, memes, and thread context.</div>
+        <div class="card">Black-box scores are hard to trust in public-safety and platform-governance settings.</div>
+        <div class="card">We need accuracy, transparency, adaptability, and lower group-wise bias together.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Problem statement</h2>
+      <p>Current detectors are mostly high-resource and text-only. They fail on low-resource languages, cultural variation, code-mixing, and multimodal hate.</p>
+      <p class="eq">x<sub>i</sub> = { T<sub>i</sub>, V<sub>i</sub>, C<sub>i</sub> }</p>
+      <p class="eq">f<sub>θ</sub>(x<sub>i</sub>) → y<sub>i</sub> ∈ {0, 1}</p>
+      <p>T = text (multilingual / code-mixed), V = image or meme, C = conversational context, y = non-hate / hate.</p>
+    </section>
+
+    <section>
+      <h2>Objectives</h2>
+      <ul>
+        <li>Classify hateful vs non-hateful social media content.</li>
+        <li>Support English, Hindi, and code-mixed posts; optional images.</li>
+        <li>Explain each decision with token evidence and a natural-language rationale.</li>
+        <li>Align explanations with human preferences using DPO.</li>
+        <li>Report fairness (FPR / macro-F1) by language group.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Proposed framework</h2>
+      <div class="grid">
+        <div class="card"><strong>Encode</strong><br/>XLM-R for T and C; optional CLIP for V.</div>
+        <div class="card"><strong>Fuse</strong><br/>Gated weights over text, vision, and context.</div>
+        <div class="card"><strong>Explain</strong><br/>LIME, attention, counterfactual cue hints.</div>
+        <div class="card"><strong>Align</strong><br/>DPO on chosen vs rejected rationales.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Explainable AI</h2>
+      <ul>
+        <li><strong>LIME</strong> — local linear surrogate over token perturbations.</li>
+        <li><strong>Attention</strong> — CLS-to-token weights from the last encoder layer.</li>
+        <li><strong>Faithfulness</strong> — drop in P(hate) after masking top evidence.</li>
+        <li><strong>Counterfactuals</strong> — “removing cue X would likely reduce hate probability.”</li>
+      </ul>
+      <p class="muted">Plausible stories are not enough; we measure whether highlighted tokens actually moved the model.</p>
+    </section>
+
+    <section>
+      <h2>Reward-optimized LLM</h2>
+      <p>A seq2seq policy (Flan-T5) generates <span class="eq">HATE / NON_HATE</span> plus a short justification.</p>
+      <p>Reward combines correctness, token overlap (faithfulness), length, and style.</p>
+      <p class="eq">L<sub>DPO</sub> = −log σ( β [ log π<sub>θ</sub>(e⁺|x)/π<sub>ref</sub>(e⁺|x) − log π<sub>θ</sub>(e⁻|x)/π<sub>ref</sub>(e⁻|x) ] )</p>
+      <p>Chosen rationales cite a target group and harmful intent. Rejected ones rely on rudeness or unrelated keywords.</p>
+    </section>
+
+    <section>
+      <h2>Implementation</h2>
+      <div class="grid">
+        <div class="card">Python package <code>hatexai</code></div>
+        <div class="card">Synthetic multilingual JSONL for a CPU dry run</div>
+        <div class="card">TF-IDF baseline + XLM-R classifier + DPO trainer</div>
+        <div class="card">Streamlit demo for live explanations</div>
+      </div>
+      <p class="footer">Public data adapters: HateXplain, HASOC, Hateful Memes / MMHS150K.</p>
+    </section>
+
+    <section>
+      <h2>Evaluation plan</h2>
+      <ul>
+        <li>Classification: accuracy, macro-F1, precision, recall, AUROC.</li>
+        <li>Explanation: comprehensiveness, mean reward, qualitative cases.</li>
+        <li>Fairness: false-positive rate by language and code-mix flag.</li>
+        <li>Ablations: text-only vs +context vs +vision vs +DPO.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Ethics</h2>
+      <ul>
+        <li>Not a sole automated punishment system — keep a human in the loop.</li>
+        <li>Identity language and dialect can inflate false positives.</li>
+        <li>Use licensed research datasets; do not scrape private accounts.</li>
+        <li>Explanations can look convincing while being unfaithful; we audit both.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Deliverables</h2>
+      <div class="grid">
+        <div class="card"><strong>1. Source</strong><br/>GitHub-ready repository with configs, training, XAI, DPO, demo.</div>
+        <div class="card"><strong>2. Paper</strong><br/>ACL-format draft in <code>paper/acl_paper.tex</code>.</div>
+        <div class="card"><strong>3. Slides</strong><br/>This deck: <code>slides/presentation.html</code>.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Thank you</h2>
+      <p>Questions and discussion.</p>
+      <p class="muted">HateXAI · Bennett University · Guided by Dr. Pradeepika Verma</p>
+      <p>Quick start: <code>python scripts/run_pipeline.py --stage baseline</code> then <code>streamlit run app/streamlit_app.py</code></p>
+    </section>
+  </div>
+</body>
+</html>

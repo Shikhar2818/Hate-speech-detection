@@ -1,0 +1,177 @@
+\documentclass[11pt]{article}
+
+% Official ACL style (https://github.com/acl-org/acl-style-files).
+% If acl.sty is unavailable, the geometry/times fallback still produces a two-column draft.
+\IfFileExists{acl.sty}{
+  \usepackage[review]{acl}
+}{
+  \usepackage[margin=2.5cm]{geometry}
+  \usepackage{times}
+  \usepackage{latexsym}
+}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{url}
+\usepackage{hyperref}
+
+\title{Hate Speech Detection through Explainable AI and Reward-Optimized Large Language Models}
+
+\author{Student Author \\
+  Bennett University \\
+  \texttt{student@bennett.edu.in} \\
+  \And
+  Dr.\ Pradeepika Verma \\
+  Bennett University \\
+  \texttt{pradeepika.verma@bennett.edu.in} \\
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Hate speech on social media is multilingual, often code-mixed, increasingly multimodal, and highly context-dependent. High-resource text-only classifiers overfit lexical cues, fail on low-resource and mixed-script posts, and rarely justify decisions in a way moderators can audit. We present \textbf{HateXAI}, a framework that maps a post \(x_i=\{T_i,V_i,C_i\}\) to a binary decision \(y_i\in\{0,1\}\) while emitting a natural-language rationale. A multilingual encoder (XLM-RoBERTa) fuses text and conversational context with optional CLIP visual features through a gated multimodal module. Explanations are produced with LIME and attention attributions and are further aligned using Direct Preference Optimization (DPO) on chosen versus rejected rationales, so the language model prefers faithful, less stereotyped justifications. On a diagnostic multilingual split the linear baseline already separates hateful from non-hateful posts; the full stack adds group-wise fairness reports and explanation reward scores. We argue that reward-guided rationales plus multimodal, low-resource modeling are necessary for trustworthy moderation rather than accuracy alone.
+\end{abstract}
+
+\section{Introduction}
+
+The scale of online conversation has outpaced manual moderation. Automated hate-speech detectors are widely deployed, yet they remain brittle: they are trained mostly on English, they ignore images and thread context, and they behave as black boxes \cite{fortuna2018survey,davidson2017hate}. Errors are not symmetric. False negatives leave targeted groups unprotected; false positives silence minorities whose dialect or reclaimed language is misread as abuse \cite{sap2019racial}.
+
+Low-resource and code-mixed settings make the problem harder. In Indian social media, Hindi--English mixing, romanized Indic text, and culturally specific insults are common, and HASOC-style shared tasks show large drops when systems trained on English are applied off-the-shelf \cite{mandl2019hasoc}. Memes add a second channel in which the text is innocuous but the image supplies the attack \cite{kiela2020hatefulmemes}.
+
+We address three gaps together:
+
+\begin{enumerate}
+    \item \textbf{Representation.} Model a post as \(x_i=\{T_i,V_i,C_i\}\) and learn \(f_\theta(x_i)\rightarrow y_i\).
+    \item \textbf{Transparency.} Attach token-level and natural-language explanations whose faithfulness can be measured \cite{ribeiro2016lime,jacovi2020faithfulness}.
+    \item \textbf{Alignment.} Use preference optimization \cite{rafailov2023dpo} so generated rationales match moderator-preferred explanations rather than fluent but unfaithful text.
+\end{enumerate}
+
+\paragraph{Contributions.}
+(1) A gated multimodal architecture for multilingual and code-mixed hate speech with optional vision.
+(2) An explanation stack (LIME, attention, counterfactual cues) coupled to a scalar explanation reward.
+(3) A DPO training recipe that treats (chosen, rejected) rationales as preferences.
+(4) An open implementation, ACL paper template, and defense slides for reproducible student research.
+
+\section{Related Work}
+
+\paragraph{Hate speech detection.}
+Early systems used bag-of-words and character n-grams \cite{davidson2017hate}. Transformer models such as HateBERT improve in-domain English accuracy \cite{caselli2021hatebert} but transfer poorly to code-mixed Hindi--English. HateXplain adds human rationales, enabling explanation-aware training \cite{mathew2021hatexplain}.
+
+\paragraph{Multilingual and multimodal abuse.}
+XLM-R provides strong cross-lingual initialization \cite{conneau2020xlmr}. HASOC and related FIRE tasks target Indo-European hate and offense \cite{mandl2019hasoc}. The Hateful Memes challenge showed that unimodal models miss image--text interactions \cite{kiela2020hatefulmemes}; CLIP supplies aligned visual features \cite{radford2021clip}.
+
+\paragraph{Explainability.}
+LIME \cite{ribeiro2016lime} and SHAP \cite{lundberg2017shap} approximate local decision surfaces. Faithfulness---whether highlighted tokens actually drove the prediction---is distinct from plausibility \cite{jacovi2020faithfulness}. We report comprehensiveness (probability drop after masking top evidence) alongside classification metrics.
+
+\paragraph{Reward-optimized LLMs.}
+RLHF trains a reward model and then a policy \cite{ouyang2022instructgpt}. DPO skips explicit RL by optimizing a classification loss on preference pairs \cite{rafailov2023dpo}. We apply DPO not to the hate label alone but to \emph{explanations}, which is closer to how moderators work.
+
+\section{Problem Formulation}
+
+Let a social media post be
+\begin{equation}
+x_i = \{T_i, V_i, C_i\},
+\end{equation}
+where \(T_i\) is textual content (possibly multilingual or code-mixed), \(V_i\) is an image or meme, and \(C_i\) is context (thread, page, or event metadata). The target is
+\begin{equation}
+f_\theta(x_i) \rightarrow y_i \in \{0,1\},
+\end{equation}
+with \(y_i=1\) denoting hateful content. We additionally produce an explanation \(e_i\) and a reward \(r(x_i,e_i,y_i)\).
+
+Hate is treated as \emph{identity-directed abuse or dehumanization}, not merely offense or profanity \cite{davidson2017hate}. This distinction is encoded in preference data: a rejected rationale may call a post hateful because it contains rude words, while the chosen rationale requires a targeted group and harmful intent.
+
+\section{Method}
+
+\subsection{Preprocessing}
+URLs and mentions are canonicalized. Language ID and a script-mixing heuristic flag code-mixed posts. Text and context are concatenated with explicit markers so the encoder can attend to \(C_i\) separately from \(T_i\).
+
+\subsection{Multimodal classifier}
+XLM-R encodes \(T_i\) and \(C_i\). Optional CLIP image features encode \(V_i\) and are frozen to limit compute. A gated fusion block learns non-negative weights \((\alpha_t,\alpha_v,\alpha_c)\) over projected modalities:
+\begin{equation}
+h = \alpha_t\,W_t t + \alpha_v\,W_v v + \alpha_c\,W_c c.
+\end{equation}
+A small MLP maps \(h\) to class logits. Training uses class-weighted cross-entropy, AdamW, and linear warmup.
+
+\subsection{Explainable AI}
+For a post \(x\), LIME perturbs tokens and fits a local linear model \cite{ribeiro2016lime}. Attention attribution averages last-layer heads from the CLS token to each position. Integrated-gradients hooks are provided for embedding-space paths. Counterfactual hints list high-risk cues whose removal is expected to lower \(P(y=1)\). Top-\(k\) tokens are verbalized as a rationale.
+
+\subsection{Reward and DPO}
+A heuristic reward used for ranking and diagnostics is
+\begin{equation}
+r = 0.5\,r_{\mathrm{corr}} + 0.3\,r_{\mathrm{faith}} + 0.1\,r_{\mathrm{len}} + 0.1\,r_{\mathrm{style}},
+\end{equation}
+where \(r_{\mathrm{corr}}\) is label agreement, \(r_{\mathrm{faith}}\) is overlap between post tokens and rationale tokens, \(r_{\mathrm{len}}\) prefers concise explanations, and \(r_{\mathrm{style}}\) penalizes vague or overclaiming text. A learned reward model can replace this heuristic when preference labels are abundant.
+
+Given a frozen reference policy \(\pi_{\mathrm{ref}}\) and a trainable policy \(\pi_\theta\), DPO minimizes
+\begin{equation}
+\mathcal{L}_{\mathrm{DPO}} = -\log\sigma\Big(\beta \big[ \log\tfrac{\pi_\theta(e^+|x)}{\pi_{\mathrm{ref}}(e^+|x)} - \log\tfrac{\pi_\theta(e^-|x)}{\pi_{\mathrm{ref}}(e^-|x)} \big]\Big),
+\end{equation}
+where \(e^+\) is the chosen explanation and \(e^-\) the rejected one \cite{rafailov2023dpo}. In our implementation the policy is a seq2seq LLM (Flan-T5) prompted to emit \texttt{HATE}/\texttt{NON\_HATE} plus a short justification.
+
+\subsection{Fairness}
+We report macro-F1 and false-positive rate stratified by language and by code-mix status, following evidence that dialect and identity markers inflate false positives \cite{sap2019racial}.
+
+\section{Experimental Setup}
+
+\paragraph{Data.}
+The repository ships a synthetic diagnostic set covering English, Hindi, and Hindi--English code-mix, with paired chosen/rejected rationales. For the camera-ready paper we recommend HateXplain \cite{mathew2021hatexplain} for rationale supervision, HASOC \cite{mandl2019hasoc} for code-mix, and Hateful Memes \cite{kiela2020hatefulmemes} for \(V_i\). A conversion script maps public JSON/JSONL into the project schema.
+
+\paragraph{Systems.}
+\begin{itemize}
+    \item \textbf{Linear:} character n-gram TF-IDF + logistic regression (CPU baseline).
+    \item \textbf{HateXAI-text:} XLM-R with context, no vision.
+    \item \textbf{HateXAI-mm:} gated fusion with CLIP.
+    \item \textbf{HateXAI-DPO:} Flan-T5 explanations aligned with DPO.
+\end{itemize}
+
+\paragraph{Metrics.}
+Accuracy, macro-F1, precision, recall, AUROC; explanation comprehensiveness; mean reward \(r\); FPR by language.
+
+\paragraph{Implementation.}
+PyTorch and Hugging Face Transformers. Default configs keep vision off so students can run on CPU; \texttt{configs/cpu.yaml} uses DistilBERT multilingual and Flan-T5-small.
+
+\section{Results}
+
+Table~\ref{tab:placeholder} is the reporting template. Fill numbers after training on the licensed public corpora. On the bundled synthetic split, the linear baseline is expected to score high because lexical cues are deliberately separable; that split validates engineering, not scientific superiority.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Model & Acc. & Macro-F1 & Expl.\ reward \\
+\midrule
+Linear TF-IDF & -- & -- & -- \\
+XLM-R text+context & -- & -- & -- \\
+XLM-R + CLIP & -- & -- & -- \\
++ DPO rationales & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\caption{Main results (fill after public-data runs). Report mean \(\pm\) std over three seeds.}
+\label{tab:placeholder}
+\end{table}
+
+\paragraph{Qualitative analysis.}
+Hateful posts that dehumanize a group or call for exclusion receive high \(P(y=1)\) with evidence on target mentions and threat verbs. Non-hateful posts about logistics, sports scores, or civic information remain negative even when they mention identity groups. Code-mixed insults are flagged by character n-grams even when word-level English lexicons miss them.
+
+\paragraph{Error modes.}
+We expect residual failures on sarcasm, reclaimed slurs, and memes whose hate is purely visual. DPO can overfit verbose gold rationales if rejected explanations are unrealistically weak; constructing hard negatives (fluent but unfaithful) is essential.
+
+\section{Ethics and Limitations}
+
+Hate-speech annotation is culturally situated. A model trained in one community may encode that community's prejudices \cite{sap2019racial}. We do not recommend fully automated penalties. Explanations can be \emph{plausible but unfaithful}; we therefore measure probability drop under masking rather than only human likert scores \cite{jacovi2020faithfulness}. Synthetic data in the repository is for software tests and must not be treated as a demographic sample. Images and user identifiers, if added later, require IRB/ethics clearance and dataset licenses. Dual-use risk: the same features that detect hate can be inverted to write it; we release classifiers and explainers, not generative attack tools.
+
+\section{Conclusion}
+
+HateXAI couples a multimodal, multilingual detector with XAI and reward-optimized rationales. Framing posts as \(x_i=\{T_i,V_i,C_i\}\) makes context and memes first-class, while DPO aligns explanations with moderator preferences. The open codebase, ACL draft, and slides provide a complete student research stack. Next steps are human evaluation of rationales, harder code-mixed corpora, and calibrated thresholds per language so that false-positive rates stay comparable across groups.
+
+\section*{Acknowledgements}
+We thank Dr.\ Pradeepika Verma for guidance. Office: N2-WS-062.
+
+\IfFileExists{acl_natbib.bst}{\bibliographystyle{acl_natbib}}{\bibliographystyle{plain}}
+\bibliography{references}
+
+\end{document}
