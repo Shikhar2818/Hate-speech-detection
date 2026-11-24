@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from hatexai.baselines.linear import FEATURE_SETS, baseline_settings, build_linear_pipeline, load_text_split
 from hatexai.data.preprocess import fuse_text
-from hatexai.data.public_sources import file_digest, load_json
+from hatexai.data.public_sources import HATEXPLAIN_FILES, file_digest, load_json
 from hatexai.eval.metrics import compute_classification_metrics, group_fairness
 from hatexai.inference import build_service_from_config
 from hatexai.utils import load_config, read_jsonl, write_json
@@ -47,11 +47,31 @@ def analyze_errors(records, predictions):
     }
 
 
-def measure_faithfulness(texts, predictions, predict_proba, *, seed, top_k=5):
+def evaluate_targets(records, predictions, annotations):
+    """Compare errors for community targets agreed on by at least two annotators."""
+    gold, predicted, groups = [], [], []
+    for row, prediction in zip(records, predictions, strict=True):
+        provenance = row["provenance"]
+        if provenance["dataset"] != "hatexplain":
+            continue
+        votes = Counter(
+            target for annotator in annotations[provenance["source_id"]]["annotators"]
+            for target in set(annotator["target"]) if target != "None"
+        )
+        for target, votes_for_target in votes.items():
+            if votes_for_target >= 2:
+                gold.append(row["label"])
+                predicted.append(prediction)
+                groups.append(target)
+    return group_fairness(gold, predicted, groups, min_support=30)
+
+
+def measure_faithfulness(texts, predictions, predict_proba, *, seed, top_k=5, labels=None):
     """Compare evidence with an equal-size random mask on the same examples."""
     rng = random.Random(seed)
     rows = []
-    for text, target in zip(texts, predictions, strict=True):
+    cohorts = {"correct": [], "incorrect": []}
+    for index, (text, target) in enumerate(zip(texts, predictions, strict=True)):
         if len(text.split()) <= top_k:
             continue
         tokens, scores = occlusion_attribution(text, predict_proba, target_class=target)
@@ -65,12 +85,23 @@ def measure_faithfulness(texts, predictions, predict_proba, *, seed, top_k=5):
             ),
             "random_sufficiency": sufficiency(text, tokens, random_scores, predict_proba, target, top_k),
         })
+        if labels is not None:
+            cohort = "correct" if target == labels[index] else "incorrect"
+            cohorts[cohort].append(rows[-1])
     return {
         "n": len(rows),
         "excluded_at_most_top_k_tokens": len(texts) - len(rows),
         "top_k": top_k,
         "seed": seed,
         "method": "occlusion",
+        "by_correctness": {
+            cohort: {
+                "n": len(items),
+                "mean_comprehensiveness": fmean(row["comprehensiveness"] for row in items) if items else None,
+                "mean_sufficiency": fmean(row["sufficiency"] for row in items) if items else None,
+            }
+            for cohort, items in cohorts.items()
+        } if labels is not None else {},
         **{
             f"mean_{key}": fmean(row[key] for row in rows) if rows else None
             for key in ("comprehensiveness", "sufficiency", "random_comprehensiveness", "random_sufficiency")
@@ -125,6 +156,7 @@ def main():
     parser.add_argument("--config", required=True)
     parser.add_argument("--analysis", choices=("errors-faithfulness", "ablation"),
                         default="errors-faithfulness")
+    parser.add_argument("--hatexplain-annotations", type=Path, help="Pinned original dataset.json for target groups")
     args = parser.parse_args()
     config = load_config(args.config)
     manifest_path = config["data"]["manifest_path"]
@@ -154,8 +186,15 @@ def main():
     predict_proba = service.predict_proba_texts
     decisions = predict_proba(texts).argmax(axis=1).tolist()
     errors = analyze_errors(records, decisions)
+    if args.hatexplain_annotations:
+        if file_digest(args.hatexplain_annotations) != HATEXPLAIN_FILES["dataset.json"]:
+            raise ValueError("Target annotations must match the pinned HateXplain release")
+        errors["by_annotated_target"] = evaluate_targets(records, decisions, load_json(args.hatexplain_annotations))
+        errors["target_note"] = "Targets reflect annotator agreement about the post. Each post can have multiple targets."
     write_json(eval_dir / "error_analysis.json", {**errors, **provenance})
-    faithfulness = measure_faithfulness(texts, decisions, predict_proba, seed=config["seed"])
+    faithfulness = measure_faithfulness(
+        texts, decisions, predict_proba, seed=config["seed"], labels=[row["label"] for row in records],
+    )
     write_json(eval_dir / "faithfulness.json", {**faithfulness, **provenance})
     print(f"Reported errors on {errors['n']} test records and faithfulness on {faithfulness['n']}")
 

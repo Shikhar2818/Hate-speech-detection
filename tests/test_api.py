@@ -129,9 +129,13 @@ def test_feedback_is_a_review_candidate_and_reviewable(client):
     assert listing and listing[0]["id"] == created["id"]
     assert "message" not in listing[0]
 
-    review = client.post(f"/api/feedback/{created['id']}/review", json={"status": "accepted", "reviewer_note": "confirmed"})
+    review = client.post(f"/api/feedback/{created['id']}/review",
+                         json={"status": "accepted", "reviewer_note": "confirmed", "reviewed_label": "non_hate"})
     assert review.status_code == 200
     assert review.json()["status"] == "accepted"
+    reviewed = client.get("/api/feedback").json()[0]
+    assert reviewed["reviewed_label"] == "non_hate"
+    assert reviewed["predicted_label"] == "hate"
 
     summary = client.get("/api/feedback/summary").json()
     assert summary["by_status"]["accepted"] == 1
@@ -156,3 +160,13 @@ def test_metrics_are_strict_json_in_evaluation_payload(client):
     assert "NaN" not in body
     assert "Infinity" not in body
     json.loads(body)
+
+
+def test_activity_counts_successful_predictions_in_this_app(client):
+    assert client.get("/api/evaluation").json()["activity"] == {"total": 0, "by_decision": {}}
+    for route in ("/api/predict", "/api/explain"):
+        response = client.post(route, json={"text": "Lunch begins at noon."})
+        assert response.status_code == 200
+        label = response.json()["decision"] or response.json()["label"]
+    assert client.post("/api/predict", json={"text": " "}).status_code == 422
+    assert client.get("/api/evaluation").json()["activity"] == {"total": 2, "by_decision": {label: 2}}

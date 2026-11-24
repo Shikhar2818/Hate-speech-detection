@@ -66,6 +66,7 @@ class FeedbackStore:
             if review:
                 record["status"] = review["status"]
                 record["reviewer_note"] = review.get("reviewer_note", "")
+                record["reviewed_label"] = review.get("reviewed_label")
                 record["reviewed_at"] = review.get("reviewed_at")
         records.sort(key=lambda r: r.get("created_at", ""), reverse=True)
         return records[:limit]
@@ -76,13 +77,15 @@ class FeedbackStore:
                 return record
         return None
 
-    def review(self, feedback_id: str, status: str, reviewer_note: str = "") -> dict[str, Any] | None:
+    def review(self, feedback_id: str, status: str, reviewer_note: str = "",
+               reviewed_label: str | None = None) -> dict[str, Any] | None:
         if self.get(feedback_id) is None:
             return None
         review = {
             "id": feedback_id,
             "status": status,
             "reviewer_note": reviewer_note,
+            "reviewed_label": reviewed_label if status == "accepted" else None,
             "reviewed_at": _now(),
         }
         with _LOCK:

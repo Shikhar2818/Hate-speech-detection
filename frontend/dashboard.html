@@ -32,6 +32,12 @@
 
   <div id="dashboard-alert" style="margin-top:18px"></div>
 
+  <section class="card" style="margin-top:18px;">
+    <div class="card-head"><h2 style="margin:0">Analysis activity</h2></div>
+    <p class="muted small">Successful prediction and explanation requests since the server started.</p>
+    <div class="grid grid-4" id="activity-metrics"></div>
+  </section>
+
   <div id="manifest" class="card reveal" style="margin-top:18px">
     <div class="skeleton" style="width:35%"></div>
     <div class="skeleton" style="width:60%"></div>
@@ -50,6 +56,8 @@
         <div class="bars" id="error-rates"></div>
       </div>
     </div>
+    <h3 style="margin-top:18px">Held-out results by language</h3>
+    <div id="language-metrics"></div>
     <div style="margin-top:18px">
       <h3>Confusion matrix</h3>
       <div class="cm-grid" id="confusion"></div>

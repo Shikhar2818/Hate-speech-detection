@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
@@ -127,6 +128,13 @@ def _model_info() -> dict[str, Any]:
 
 
 def create_app() -> FastAPI:
+    activity: Counter[str] = Counter()
+    activity_lock = Lock()
+
+    def record_prediction(result: dict[str, Any]) -> None:
+        with activity_lock:
+            activity[result.get("decision") or result["label"]] += 1
+
     app = FastAPI(
         title="HateXAI API",
         version=MODEL_VERSION,
@@ -173,6 +181,7 @@ def create_app() -> FastAPI:
             print(f"[predict] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Inference failed. The model may be unavailable.") from exc
         result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
+        record_prediction(result)
         return result
 
     @app.post("/api/explain", response_model=ExplainResponse, dependencies=[Depends(rate_limit)])
@@ -184,6 +193,7 @@ def create_app() -> FastAPI:
             print(f"[explain] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Explanation failed. The model may be unavailable.") from exc
         result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
+        record_prediction(result)
         return result
 
     @app.post("/api/vision-check", dependencies=[Depends(rate_limit)])
@@ -249,7 +259,12 @@ def create_app() -> FastAPI:
         training = json.loads(training_path.read_text(encoding="utf-8")) if (
             public_benchmark and training_path.exists()
         ) else {}
-        out: dict[str, Any] = {"available": {}, "missing": []}
+        with activity_lock:
+            counts = dict(activity)
+        out: dict[str, Any] = {
+            "available": {}, "missing": [],
+            "activity": {"total": sum(counts.values()), "by_decision": counts},
+        }
         for key, filename in artifacts.items():
             path = eval_dir / filename
             if not path.exists():
@@ -308,7 +323,7 @@ def create_app() -> FastAPI:
         payload: ReviewRequest,
         feedback_store: FeedbackStore = Depends(store),
     ) -> dict[str, Any]:
-        review = feedback_store.review(feedback_id, payload.status, payload.reviewer_note)
+        review = feedback_store.review(feedback_id, payload.status, payload.reviewer_note, payload.reviewed_label)
         if review is None:
             raise HTTPException(status_code=404, detail="Unknown feedback id")
         return review

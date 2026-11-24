@@ -73,6 +73,15 @@ function renderHeadline(test, errorAnalysis) {
     rates.append(barRow(`${row.source_label} errors (n=${row.support})`, row.error_rate));
   }
 
+  const languages = clear($("#language-metrics"));
+  const groups = Object.entries(test.by_language || test.fairness_by_language || {});
+  if (!groups.length) languages.textContent = "Language breakdown unavailable.";
+  for (const [language, row] of groups) {
+    const metrics = row.insufficient_support ? "insufficient support"
+      : `macro F1 ${num(row.f1_macro)} · FPR ${pct(row.false_positive_rate)} · FNR ${pct(row.false_negative_rate)}`;
+    languages.append(el("p", { class: "muted small", text: `${language} (n=${row.support}) · ${metrics}` }));
+  }
+
   const cm = clear($("#confusion"));
   const matrix = test.confusion_matrix || {};
   [
@@ -259,6 +268,15 @@ async function loadDashboard() {
     return;
   }
   const available = data.available || {};
+  if (data.activity) {
+    const counts = data.activity.by_decision;
+    $("#activity-metrics").append(
+      metricTile("Total requests", data.activity.total),
+      metricTile("Hate", counts.hate || 0),
+      metricTile("Non-hate", counts.non_hate || 0),
+      metricTile("Needs review", counts.needs_review || 0),
+    );
+  }
   showAlert($("#dashboard-alert"), "ok", "Evaluation artifacts loaded.");
   renderManifest(available.run_manifest || available.baseline_training);
   renderHeadline(available.baseline_test, available.error_analysis);

@@ -101,12 +101,14 @@ class FeedbackRecord(BaseModel):
     user_label: str | None = None
     comment: str = ""
     reviewer_note: str | None = None
+    reviewed_label: Literal["hate", "non_hate"] | None = None
     reviewed_at: str | None = None
 
 
 class ReviewRequest(BaseModel):
     status: Literal["pending_review", "accepted", "rejected", "needs_discussion"]
     reviewer_note: str = Field("", max_length=MAX_COMMENT_CHARS)
+    reviewed_label: Literal["hate", "non_hate"] | None = None
 
 
 class HealthResponse(BaseModel):

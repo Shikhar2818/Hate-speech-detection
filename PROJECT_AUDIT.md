@@ -1,5 +1,19 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## Project checklist review (2026-11-24)
+
+| Requirement | Current coverage |
+| --- | --- |
+| Data and preprocessing | Pinned, deduplicated English HateXplain splits with source labels and rationale masks. Text normalization preserves punctuation and emoji. Authorized multilingual and meme datasets are pending. Their context coverage and image preprocessing require verification. |
+| Detection | The trained TF-IDF baseline serves text and optional supplied context. Measuring the effect of conversation context requires labeled threads. The transformer and vision fusion code still need trained, evaluated checkpoints. |
+| Explanations | LIME, occlusion, attribution summaries, and held-out faithfulness with results split by prediction correctness. Image explanations and model-generated rationales depend on their respective trained models. |
+| Feedback and reward optimization | Reviewers can save a corrected hate or non-hate label alongside the original submission. DPO code is tested. Training and comparison require an independent human-reviewed preference corpus. |
+| Fairness and evaluation | Held-out classification metrics, feature and calibration comparisons, plus English error breakdowns by annotated target. Cross-language and code-mixed fairness, bias reduction, and multimodal comparisons still need experiments. Target groups describe posts and can overlap. |
+| Web app | Text detection, image file validation, feedback review, and analytics. Live request counts reset when the server restarts and contain no post text. |
+
+Reproduce the correct-versus-incorrect attribution and annotated-target reports with
+`python experiments/evaluate_public_baseline.py --config configs/hatexplain_baseline.yaml --hatexplain-annotations data/raw/hatexplain/dataset.json`.
+
 ## Application verification (2026-11-24)
 
 Ran the existing FastAPI application and all five frontend pages against the English HateXplain

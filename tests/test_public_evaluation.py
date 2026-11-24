@@ -4,6 +4,7 @@ import pytest
 from experiments.evaluate_public_baseline import (
     analyze_errors,
     evaluate_ablations,
+    evaluate_targets,
     fit_feature_ablations,
     measure_faithfulness,
 )
@@ -36,6 +37,22 @@ def test_faithfulness_uses_seeded_controls_and_skips_short_posts():
     assert report["n"] == report["excluded_at_most_top_k_tokens"] == 1
     assert report["mean_comprehensiveness"] == pytest.approx(.8)
     assert report["mean_sufficiency"] == pytest.approx(.9)
+    grouped = measure_faithfulness(texts, [1, 0], predict, seed=42, top_k=1, labels=[0, 0])
+    assert grouped["by_correctness"]["incorrect"]["n"] == 1
+    assert grouped["by_correctness"]["correct"]["n"] == 0
+
+
+def test_target_analysis_requires_annotator_agreement():
+    records = [{"label": 0, "provenance": {"dataset": "hatexplain", "source_id": "post"}}]
+    annotations = {"post": {"annotators": [
+        {"target": ["Group A", "Group A", "Group B"]},
+        {"target": ["Group A"]},
+        {"target": ["None"]},
+    ]}}
+    result = evaluate_targets(records, [1], annotations)
+    assert set(result) == {"Group A"}
+    assert result["Group A"]["support"] == 1
+    assert result["Group A"]["false_positive_rate"] is None
 
 
 def test_sufficiency_keeps_evidence_in_original_order():

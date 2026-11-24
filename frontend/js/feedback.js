@@ -25,6 +25,12 @@ function renderQueue(records, summary) {
   }
   records.slice(0, 20).forEach((r) => {
     const card = el("div", { class: "card", style: "padding:16px; background: var(--panel-2); margin-bottom:12px;" });
+    const label = el("select", { "aria-label": "Reviewed label" }, [
+      el("option", { value: "", text: "Choose a reviewed label (optional)" }),
+      el("option", { value: "hate", text: "Hate" }),
+      el("option", { value: "non_hate", text: "Non-hate" }),
+    ]);
+    label.value = r.reviewed_label || "";
     card.append(
       el("div", { class: "field-row" }, [
         el("span", { class: `pill ${STATUS_CLASS[r.status] || "neutral"}`, text: r.status.replace("_", " ") }),
@@ -33,8 +39,9 @@ function renderQueue(records, summary) {
       el("p", { style: "margin:10px 0 6px", text: r.text.slice(0, 260) }),
       el("p", { class: "muted small", text: `Model said: ${r.predicted_label || "n/a"} (P(hate)=${r.probability_hate === null ? "n/a" : num(r.probability_hate, 3)}) · user says: ${r.user_label || "unspecified"}` }),
       r.comment ? el("p", { class: "muted small", text: `“${r.comment}”` }) : null,
+      label,
       el("div", { class: "chips", style: "margin-top:10px" }, [
-        el("button", { class: "chip", text: "Accept", onclick: () => review(r.id, "accepted") }),
+        el("button", { class: "chip", text: "Accept", onclick: () => review(r.id, "accepted", label.value || null) }),
         el("button", { class: "chip", text: "Reject", onclick: () => review(r.id, "rejected") }),
         el("button", { class: "chip", text: "Needs discussion", onclick: () => review(r.id, "needs_discussion") }),
       ])
@@ -53,9 +60,9 @@ async function refreshQueue() {
   }
 }
 
-async function review(id, status) {
+async function review(id, status, reviewed_label = null) {
   try {
-    await API.post(`/api/feedback/${id}/review`, { status, reviewer_note: "" });
+    await API.post(`/api/feedback/${id}/review`, { status, reviewed_label });
     await refreshQueue();
   } catch (err) {
     showAlert($("#feedback-alert"), "error", `Review update failed: ${err.message}`);
