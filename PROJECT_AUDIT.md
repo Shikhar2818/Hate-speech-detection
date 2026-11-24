@@ -1,5 +1,23 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## Application verification (2026-11-24)
+
+Ran the existing FastAPI application and all five frontend pages against the English HateXplain
+checkpoint. Fixed LIME for punctuation and emoji, aligned token attributions with the original
+input, and used P(hate) as the common direction for LIME and occlusion. The decision-only API
+now scores text directly. Over ten warm local requests, median latency for the same input fell
+from 81 ms to 13 ms.
+
+Feedback attaches the input that was actually scored. Clearing an analysis resets its counter and
+discards any late response. The analysis page now exposes image file validation, including a full
+decode and a check that the contents match the declared type. The dashboard tables scroll within
+their cards on mobile. The dashboard reports binary and review-policy metrics separately.
+
+Rescoring the 1,924 held-out posts reproduced 0.792 macro F1 and 83.2% accuracy with the binary
+cutoff. The served policy routed 284 posts to review. Among automatically decided posts,
+accuracy was 75.9% and the false-positive rate was 31.5% among decided negatives. The app
+remains a human-assisted English research prototype. Vision classification remains unavailable.
+
 ## Dataset integration update (2026-11-24)
 
 This section records the current dataset state. The audit below is the historical review of `58a9ec8`.

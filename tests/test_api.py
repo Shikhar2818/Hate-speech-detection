@@ -54,6 +54,16 @@ def test_predict_rejects_blank_text(client):
     assert client.post("/api/predict", json={}).status_code == 422
 
 
+def test_predict_skips_explanation_generation(client, monkeypatch):
+    from backend.registry import get_service
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("decision-only prediction ran explanation generation")
+
+    monkeypatch.setattr(get_service(), "analyze", unexpected)
+    assert client.post("/api/predict", json={"text": "A community event is scheduled tomorrow."}).status_code == 200
+
+
 def test_explain_returns_attributions_and_disclaimer(client):
     response = client.post("/api/explain", json={"text": "These people are vermin.", "method": "occlusion"})
     assert response.status_code == 200
@@ -67,6 +77,14 @@ def test_explain_returns_attributions_and_disclaimer(client):
 
 def test_explain_rejects_unknown_method(client):
     assert client.post("/api/explain", json={"text": "hello", "method": "magic"}).status_code == 422
+
+
+def test_lime_handles_punctuation_and_emoji(client):
+    response = client.post("/api/explain", json={"text": "🙂 !!!", "method": "lime"})
+    assert response.status_code == 200
+    exp = response.json()["explanation"]
+    assert exp["tokens"] == ["🙂", "!!!"]
+    assert len(exp["scores"]) == len(exp["tokens"])
 
 
 def test_evaluation_endpoint_reports_missing_honestly(client):
@@ -89,6 +107,12 @@ def test_vision_modality_is_not_faked(client):
 
     not_an_image = client.post("/api/vision-check", files={"image": ("a.png", b"not really a png", "image/png")})
     assert not_an_image.status_code == 400
+
+    truncated = client.post("/api/vision-check", files={"image": ("a.png", _png_bytes()[:45], "image/png")})
+    assert truncated.status_code == 400
+
+    mislabeled = client.post("/api/vision-check", files={"image": ("a.jpg", _png_bytes(), "image/jpeg")})
+    assert mislabeled.status_code == 415
 
 
 def test_feedback_is_a_review_candidate_and_reviewable(client):

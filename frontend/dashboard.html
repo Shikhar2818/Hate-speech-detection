@@ -26,8 +26,8 @@
 <main class="container" style="padding: 34px 22px 60px;">
   <h1 style="margin-bottom:.2em">Model evaluation</h1>
   <p class="muted" style="max-width: 74ch;">
-    Every number below is loaded from the experiment artifacts in <span class="mono">outputs/eval/</span>.
-    Systems that have not been trained show an explicit unavailable state — nothing is simulated.
+    Results come from the active model profile. The binary metrics use a 0.50 cutoff.
+    The decision-policy section reports the validation-selected review band separately.
   </p>
 
   <div id="dashboard-alert" style="margin-top:18px"></div>
@@ -38,7 +38,7 @@
   </div>
 
   <section class="card reveal" id="headline-card">
-    <div class="card-head"><h2 style="margin:0">Primary metrics</h2><span class="muted small" id="headline-scope"></span></div>
+    <div class="card-head"><h2 style="margin:0">Binary test metrics</h2><span class="muted small" id="headline-scope"></span></div>
     <div class="grid grid-4" id="headline-metrics"></div>
     <div class="grid grid-2" style="margin-top:18px">
       <div>
@@ -74,24 +74,28 @@
 
   <section class="card reveal">
     <div class="card-head"><h2 style="margin:0">System comparison</h2></div>
-    <table>
-      <thead>
-        <tr><th>System</th><th>Status</th><th class="num">Accuracy</th><th class="num">Macro-F1</th><th class="num">AUROC</th><th class="num">ECE</th><th>Notes</th></tr>
-      </thead>
-      <tbody id="comparison-body"></tbody>
-    </table>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="System comparison table">
+      <table>
+        <thead>
+          <tr><th>System</th><th>Status</th><th class="num">Accuracy</th><th class="num">Macro-F1</th><th class="num">AUROC</th><th class="num">ECE</th><th>Notes</th></tr>
+        </thead>
+        <tbody id="comparison-body"></tbody>
+      </table>
+    </div>
     <p class="muted small" id="comparison-caveat" style="margin-top:12px"></p>
   </section>
 
   <section class="card reveal">
     <div class="card-head"><h2 style="margin:0">Ablation: features and calibration</h2></div>
     <p class="muted small" id="ablation-note"></p>
-    <table>
-      <thead>
-        <tr><th>Feature set</th><th>Calibrated</th><th class="num" id="ablation-f1-label">CV macro-F1</th><th class="num">Test acc.</th><th class="num">Brier</th><th class="num">ECE</th><th class="num">Probe acc.</th><th class="num">Probe (unambig.)</th></tr>
-      </thead>
-      <tbody id="ablation-body"></tbody>
-    </table>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Ablation table">
+      <table>
+        <thead>
+          <tr><th>Feature set</th><th>Calibrated</th><th class="num" id="ablation-f1-label">CV macro-F1</th><th class="num">Test acc.</th><th class="num">Brier</th><th class="num">ECE</th><th class="num">Probe acc.</th><th class="num">Probe (unambig.)</th></tr>
+        </thead>
+        <tbody id="ablation-body"></tbody>
+      </table>
+    </div>
   </section>
 
   <section class="card reveal">
@@ -102,7 +106,7 @@
       <div><h3>Subset scores</h3><div class="bars" id="probe-subsets"></div></div>
     </div>
     <h3 style="margin-top:20px">Misclassified probes</h3>
-    <div id="probe-failures"></div>
+    <div id="probe-failures" class="table-scroll"></div>
   </section>
 
   <section class="card reveal">

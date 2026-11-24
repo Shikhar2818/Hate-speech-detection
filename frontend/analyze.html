@@ -77,14 +77,18 @@
     </section>
   </div>
 
-  <div class="card hidden" id="vision-card" style="margin-top:18px;">
-    <div class="card-head"><h3 style="margin:0">Image modality</h3><span class="badge warn" style="margin:0">Unavailable</span></div>
-    <p class="muted small">
-      No vision model is trained or evaluated in this build, so image and meme content is deliberately
-      not analysed. The backend still validates uploads (type, 5&nbsp;MB cap, decodability) and then discards
-      them, so nothing is silently pretended.
-    </p>
-  </div>
+  <section class="card" style="margin-top:18px;">
+    <div class="card-head"><h3 style="margin:0">Image file validation</h3></div>
+    <p class="muted small" id="image-help">Upload a PNG, JPEG, or WebP up to 5 MB. Image classification is unavailable.</p>
+    <form id="image-form">
+      <label for="image-file">Image file</label>
+      <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp" aria-describedby="image-help" required />
+      <div style="margin-top:12px;">
+        <button class="btn btn-ghost" id="image-submit" type="submit">Validate image</button>
+      </div>
+    </form>
+    <div id="image-alert" aria-live="polite"></div>
+  </section>
 </main>
 
 <footer class="site-footer">

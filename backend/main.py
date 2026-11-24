@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -31,7 +30,7 @@ EVAL_DIR = PROJECT_ROOT / "outputs" / "eval"
 FEEDBACK_DIR = PROJECT_ROOT / "outputs" / "feedback"
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
-ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
+IMAGE_FORMATS = {"image/png": "PNG", "image/jpeg": "JPEG", "image/webp": "WEBP"}
 
 # Simple fixed-window rate limiter, per client. Enough to keep a local research
 # demo from being trivially hammered; a real deployment would use a shared store.
@@ -169,11 +168,10 @@ def create_app() -> FastAPI:
         # returns a clean 500 rather than an unhandled server error.
         try:
             service = get_service()
-            result = service.analyze(payload.text, payload.context, method="lime")
+            result = service.predict(payload.text, payload.context)
         except Exception as exc:  # noqa: BLE001 - surface a clean error, log details server-side
             print(f"[predict] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Inference failed. The model may be unavailable.") from exc
-        result.pop("explanation", None)  # /api/predict returns no explanation payload
         result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
         return result
 
@@ -189,37 +187,36 @@ def create_app() -> FastAPI:
         return result
 
     @app.post("/api/vision-check", dependencies=[Depends(rate_limit)])
-    async def vision_check(image: UploadFile = File(...)) -> dict[str, Any]:
+    def vision_check(image: UploadFile = File(...)) -> dict[str, Any]:
         """Validate an uploaded image, then refuse to pretend to analyse it.
 
         No vision model is trained, so this endpoint never fabricates a
         prediction. It exists to exercise safe upload handling: type check, size
         cap, a real decode attempt, and guaranteed temp-file cleanup.
         """
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
+        if image.content_type not in IMAGE_FORMATS:
             raise HTTPException(status_code=415, detail=f"Unsupported image type: {image.content_type}")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir) / "upload"
-            total = 0
-            try:
-                with open(tmp_path, "wb") as handle:
-                    while chunk := await image.read(1024 * 1024):
-                        total += len(chunk)
-                        if total > MAX_IMAGE_BYTES:
-                            raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit")
-                        handle.write(chunk)
-                from PIL import Image
+        try:
+            from PIL import Image
 
-                with Image.open(tmp_path) as img:
-                    width, height = img.size
-                    fmt = img.format
-            except HTTPException:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                raise HTTPException(status_code=400, detail="File is not a decodable image") from exc
-            finally:
-                await image.close()
+            # FastAPI has already spooled the upload. Decode it in the route's worker thread.
+            total = image.file.seek(0, os.SEEK_END)
+            if total > MAX_IMAGE_BYTES:
+                raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit")
+            image.file.seek(0)
+            with Image.open(image.file) as img:
+                width, height = img.size
+                fmt = img.format
+                if fmt != IMAGE_FORMATS[image.content_type]:
+                    raise HTTPException(status_code=415, detail="Image contents do not match the file type")
+                img.load()
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail="File is not a decodable image") from exc
+        finally:
+            image.file.close()
 
         return {
             "received_bytes": total,
@@ -228,10 +225,7 @@ def create_app() -> FastAPI:
             "format": fmt,
             "analyzed": False,
             "status": "vision_not_available",
-            "message": (
-                "The image was validated and discarded, but it was NOT analysed: no vision model "
-                "is trained or evaluated in this build. See /api/model-info."
-            ),
+            "message": "Image validated. Image classification is unavailable.",
         }
 
     @app.get("/api/evaluation")

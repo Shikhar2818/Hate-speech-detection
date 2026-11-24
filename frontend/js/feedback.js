@@ -9,6 +9,13 @@ const STATUS_CLASS = {
 
 const attached = { predicted_label: null, probability_hate: null, model_version: null };
 
+function clearAttachment() {
+  attached.predicted_label = null;
+  attached.probability_hate = null;
+  attached.model_version = null;
+  $("#fb-prediction").textContent = "no analysis attached";
+}
+
 function renderQueue(records, summary) {
   const queue = clear($("#queue"));
   $("#queue-summary").textContent = summary ? `${summary.total} report(s) · ${Object.entries(summary.by_status).map(([k, v]) => `${v} ${k.replace("_", " ")}`).join(", ")}` : "";
@@ -77,9 +84,7 @@ async function submit(event) {
     });
     showAlert($("#feedback-alert"), "ok", `${result.message} (id ${result.id})`);
     $("#feedback-form").reset();
-    attached.predicted_label = null;
-    attached.probability_hate = null;
-    $("#fb-prediction").textContent = "no analysis attached";
+    clearAttachment();
     await refreshQueue();
   } catch (err) {
     showAlert($("#feedback-alert"), "error", err.message);
@@ -91,6 +96,7 @@ async function submit(event) {
 document.addEventListener("DOMContentLoaded", () => {
   const stored = sessionStorage.getItem("hatexai.feedback");
   if (stored) {
+    sessionStorage.removeItem("hatexai.feedback");
     try {
       const data = JSON.parse(stored);
       $("#fb-text").value = data.text || "";
@@ -105,6 +111,8 @@ document.addEventListener("DOMContentLoaded", () => {
       /* ignore malformed prefill */
     }
   }
+  $("#fb-text").addEventListener("input", clearAttachment);
+  $("#fb-context").addEventListener("input", clearAttachment);
   $("#feedback-form").addEventListener("submit", submit);
   refreshQueue();
 });

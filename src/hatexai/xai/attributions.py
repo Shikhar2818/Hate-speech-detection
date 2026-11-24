@@ -60,17 +60,26 @@ def lime_attribution(
     predict_proba: Callable[[list[str]], np.ndarray],
     samples: int = 200,
 ) -> tuple[list[str], list[float]]:
-    """LIME local surrogate over whitespace tokens (Ribeiro et al., 2016)."""
+    """LIME coefficients for P(hate), aligned to the original token positions."""
     from lime.lime_text import LimeTextExplainer
 
-    explainer = LimeTextExplainer(class_names=["non_hate", "hate"])
-    explanation = explainer.explain_instance(
-        text, predict_proba, num_features=12, num_samples=samples
+    tokens = text.split()
+    if not tokens:
+        return [], []
+
+    def score_perturbations(texts):
+        # Use the same spacing as the faithfulness masks after token deletion.
+        return predict_proba([" ".join(item.split()) or " " for item in texts])
+
+    explainer = LimeTextExplainer(
+        class_names=["non_hate", "hate"], split_expression=r"\s+", bow=False,
+        mask_string="", random_state=42,
     )
-    pairs = explanation.as_list()
-    tokens = [p[0] for p in pairs]
-    scores = [float(p[1]) for p in pairs]
-    return tokens, scores
+    explanation = explainer.explain_instance(
+        " ".join(tokens), score_perturbations, labels=(1,), num_features=12, num_samples=samples,
+    )
+    weights = dict(explanation.local_exp[1])
+    return tokens, [float(weights.get(index, 0.0)) for index in range(len(tokens))]
 
 
 def attention_attribution(

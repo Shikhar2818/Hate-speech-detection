@@ -118,8 +118,10 @@ function renderThreshold(threshold, threeWay) {
       el("div", { class: "grid grid-2" }, [
         metricTile("Decided accuracy", num(m.accuracy, 3)),
         metricTile("Decided macro-F1", num(m.f1_macro, 3)),
+        metricTile("Decided false-positive rate", pct(m.false_positive_rate)),
+        metricTile("Decided false-negative rate", pct(m.false_negative_rate)),
       ]),
-      el("p", { class: "muted small", style: "margin-top:10px", text: "Metrics computed over non-abstained examples only; abstentions are counted separately." })
+      el("p", { class: "muted small", style: "margin-top:10px", text: "These metrics apply to the automatically decided posts. The review rate uses the full test split." })
     );
   } else {
     op.append(

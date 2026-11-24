@@ -58,3 +58,13 @@ def test_lime_returns_attributions():
     tokens, scores = lime_attribution(text, _keyword_model(), samples=80)
     assert len(tokens) == len(scores)
     assert any("vermin" in t for t in tokens)
+
+
+def test_lime_keeps_repeated_tokens_and_punctuation_in_input_order():
+    text = "one vermin, one 🙂"
+    result = lime_attribution(text, _keyword_model(), samples=80)
+    tokens, scores = result
+    assert tokens == text.split()
+    assert len(tokens) == len(scores)
+    assert scores[1] > 0
+    assert result == lime_attribution(text, _keyword_model(), samples=80)

@@ -183,7 +183,7 @@ test split and 0.639 on the probes; the audit documents why.
 | GET | `/api/model-info` | Architecture, languages, modalities, limitations, responsible use |
 | POST | `/api/predict` | Decision + calibrated probabilities + uncertainty |
 | POST | `/api/explain` | `/api/predict` plus token attributions and faithfulness (`method`: `lime` or `occlusion`) |
-| POST | `/api/vision-check` | Validates an image upload (type, 5 MB cap, decodability) and refuses to fake analysis |
+| POST | `/api/vision-check` | Validates PNG/JPEG/WebP file type, 5 MB size limit, and full decodability |
 | GET | `/api/evaluation` | All evaluation artifacts, with an explicit `missing` list |
 | POST | `/api/feedback` | Submit a report → stored as a **review candidate** |
 | GET | `/api/feedback` | Review queue (latest status merged from the review log) |
@@ -212,8 +212,8 @@ uploads are temp-file cleaned; no secrets are read from or written to the reposi
 Plain HTML5 + CSS3 + vanilla JavaScript in `frontend/` — no framework, no build step, no Streamlit.
 
 - `index.html` — landing page with an animated neural-network hero and feature cards
-- `analyze.html` — detection workspace: input, char counter, examples, results with token highlighting,
-  probability bars, uncertainty indicator, and faithfulness tiles
+- `analyze.html` — detection workspace with token attributions, uncertainty, report handoff, and image
+  file validation. Image classification requires a trained vision model.
 - `dashboard.html` — evaluation dashboard: metrics, confusion matrix, decision policy, system comparison,
   ablation, robustness, faithfulness
 - `feedback.html` — report form + human review queue

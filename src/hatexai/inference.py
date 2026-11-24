@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -11,9 +11,9 @@ from hatexai.data.public_sources import file_digest, load_json
 from hatexai.eval.thresholds import decision_three_way
 from hatexai.reward.scoring import heuristic_reward
 from hatexai.xai.attributions import (
-    counterfactual_hints,
     format_rationale,
     lime_attribution,
+    occlusion_attribution,
     top_k_tokens,
 )
 from hatexai.xai.faithfulness import comprehensiveness, sufficiency
@@ -56,6 +56,30 @@ class LinearHateService:
     def predict_proba_texts(self, texts: list[str]) -> np.ndarray:
         return self.model.predict_proba(texts)
 
+    def _score(self, text: str, context: str) -> tuple[dict[str, Any], str]:
+        feats = extract_text_features(text)
+        fused = fuse_text(text, context, feats.language, feats.code_mixed)
+        probs = self.predict_proba_texts([fused])[0]
+        label = int(np.argmax(probs))
+        result = {
+            "label": LABEL_NAMES[label],
+            "label_id": label,
+            "probability_hate": float(probs[1]),
+            "probability_non_hate": float(probs[0]),
+            "confidence": float(probs[label]),
+            "language": feats.language,
+            "code_mixed": feats.code_mixed,
+            "normalized_text": feats.normalized,
+            "uncertainty": uncertainty_from_probs(probs),
+        }
+        if self.decision_bounds is not None:
+            result["decision"] = decision_three_way(float(probs[1]), *self.decision_bounds)
+        return result, fused
+
+    def predict(self, text: str, context: str = "") -> dict[str, Any]:
+        result, _ = self._score(text, context)
+        return result
+
     def analyze(
         self,
         text: str,
@@ -63,61 +87,45 @@ class LinearHateService:
         method: str = "lime",
         gold_label: int | None = None,
     ) -> dict[str, Any]:
-        feats = extract_text_features(text)
-        fused = fuse_text(text, context, feats.language, feats.code_mixed)
-        probs = self.predict_proba_texts([fused])[0]
-        label = int(np.argmax(probs))
-        prob = float(probs[label])
+        result, fused = self._score(text, context)
+        label = result["label_id"]
+        prob = result["confidence"]
 
         if method == "occlusion":
-            from hatexai.xai.attributions import occlusion_attribution
-
-            tokens, scores = occlusion_attribution(
-                fused, self.predict_proba_texts, target_class=label
-            )
+            tokens, scores = occlusion_attribution(fused, self.predict_proba_texts, target_class=1)
         else:
             method = "lime"
             tokens, scores = lime_attribution(fused, self.predict_proba_texts, samples=self.lime_samples)
 
-        evidence = top_k_tokens(tokens, scores, k=8)
+        evidence_count = sum(abs(score) > 1e-8 for score in scores)
+        evidence = top_k_tokens(tokens, scores, k=min(8, evidence_count))
         rationale = format_rationale(label, prob, evidence, method)
-        rationale = rationale + " " + " ".join(counterfactual_hints(feats.normalized))
 
-        # Faithfulness is measured on the same masking mechanism the attribution
-        # uses, so the explanation is testable rather than decorative.
-        faith = {
-            "comprehensiveness": comprehensiveness(fused, tokens, scores, self.predict_proba_texts, target_class=label),
-            "sufficiency": sufficiency(fused, tokens, scores, self.predict_proba_texts, target_class=label),
-        }
-
-        result: dict[str, Any] = {
-            "label": LABEL_NAMES[label],
-            "label_id": label,
-            "probability_hate": float(probs[1]),
-            "probability_non_hate": float(probs[0]),
-            "confidence": prob,
-            "language": feats.language,
-            "code_mixed": feats.code_mixed,
-            "normalized_text": feats.normalized,
-            "uncertainty": uncertainty_from_probs(probs),
-            "explanation": {
-                "method": method,
-                "predicted_label": label,
-                "predicted_prob": prob,
-                "tokens": tokens,
-                "scores": [float(s) for s in scores],
-                "top_evidence": evidence,
-                "rationale": rationale,
-                "faithfulness": faith,
-                "disclaimer": (
-                    "Highlighted tokens are model-derived feature attributions, not proof of "
-                    "intent. The natural-language rationale is generated from those "
-                    "attributions and from lexical cues and must be read separately."
+        faith = {"comprehensiveness": None, "sufficiency": None}
+        if evidence_count:
+            mask_options = {"target_class": label, "top_k": min(5, evidence_count)}
+            faith = {
+                "comprehensiveness": comprehensiveness(
+                    fused, tokens, scores, self.predict_proba_texts, **mask_options,
                 ),
-            },
+                "sufficiency": sufficiency(
+                    fused, tokens, scores, self.predict_proba_texts, **mask_options,
+                ),
+            }
+        result["explanation"] = {
+            "method": method,
+            "predicted_label": label,
+            "predicted_prob": prob,
+            "tokens": tokens,
+            "scores": [float(s) for s in scores],
+            "top_evidence": evidence,
+            "rationale": rationale,
+            "faithfulness": faith,
+            "disclaimer": (
+                "Highlighted tokens are model-derived feature attributions, not proof of intent. "
+                "The summary describes the binary model score. The review policy uses separate thresholds."
+            ),
         }
-        if self.decision_bounds is not None:
-            result["decision"] = decision_three_way(float(probs[1]), *self.decision_bounds)
         # Reward is only meaningful with an external label. Computing it against
         # the model's own prediction (the previous behaviour) pinned the
         # correctness term to 1.0 for every input — see PROJECT_AUDIT.md 3.1.

@@ -9,7 +9,7 @@ const EXAMPLES = [
   "Mere dost ne kal interview crack kiya, results aaj aayenge. Wish him luck!",
 ];
 
-const state = { operating: null, last: null };
+const state = { operating: null, last: null, pending: null };
 
 function threeWayVerdict(result) {
   if (result.decision) return result.decision === "needs_review" ? "review" : result.decision;
@@ -51,7 +51,8 @@ function renderTokens(tokens, scores) {
       const node = el("span", {
         class: `tok ${cls}`,
         text: token,
-        title: `${score >= 0 ? "+" : ""}${score.toFixed(4)} (${score > 0 ? "pushes toward hate" : "pushes toward non-hate"})`,
+        title: cls === "neutral" ? "Little or no measured influence"
+          : `${score >= 0 ? "+" : ""}${score.toFixed(4)} (${score > 0 ? "pushes toward hate" : "pushes toward non-hate"})`,
         style: cls === "neutral" ? "" : `opacity:${(0.45 + 0.55 * magnitude).toFixed(2)}`,
       });
       return node;
@@ -59,7 +60,7 @@ function renderTokens(tokens, scores) {
   );
 }
 
-function renderResult(result) {
+function renderResult(result, input) {
   const body = clear($("#results-body"));
   const verdict = threeWayVerdict(result);
   const exp = result.explanation;
@@ -91,14 +92,14 @@ function renderResult(result) {
 
   // Uncertainty + faithfulness tiles
   const unc = result.uncertainty || {};
-  const uncertain = verdict === "review" || unc.is_uncertain;
+  const needsReview = verdict === "review";
   body.append(
-    el("div", { class: `uncertainty ${uncertain ? "warn" : "ok"}` }, [
-      el("strong", { text: uncertain ? "⚠ Uncertain" : "✓ Confident" }),
+    el("div", { class: `uncertainty ${needsReview || unc.is_uncertain ? "warn" : "ok"}` }, [
+      el("strong", { text: unc.is_uncertain ? "Elevated model uncertainty" : "Model uncertainty" }),
       el("span", {
         class: "small muted",
         text: `margin ${num(unc.margin, 3)} · entropy ${num(unc.normalized_entropy, 3)}${
-          uncertain ? " — escalate to human review" : ""
+          needsReview ? " · routed to human review" : ""
         }`,
       }),
     ])
@@ -108,7 +109,7 @@ function renderResult(result) {
   body.append(
     el("div", { class: "grid grid-3", style: "margin-top:16px" }, [
       el("div", { class: "metric-tile" }, [
-        el("div", { class: "k", text: "Confidence (calibrated)" }),
+        el("div", { class: "k", text: "Binary prediction confidence" }),
         el("div", { class: "v", text: pct(result.confidence) }),
       ]),
       el("div", { class: "metric-tile" }, [
@@ -134,13 +135,20 @@ function renderResult(result) {
   body.append(
     el("div", { class: "chips" }, (exp.top_evidence || []).map((t) => el("span", { class: "chip", text: t })))
   );
-  body.append(el("h3", { style: "margin-top:20px", text: "Generated rationale" }));
+  body.append(el("h3", { style: "margin-top:20px", text: "Attribution summary" }));
   body.append(el("div", { class: "rationale", text: exp.rationale }));
   body.append(el("div", { class: "disclaimer", style: "margin-top:12px", text: exp.disclaimer }));
 
   showAlert($("#form-alert"), "ok", "Analysis complete.");
   $("#report-btn").classList.remove("hidden");
-  state.last = result;
+  state.last = { result, input };
+}
+
+function setAnalyzing(active) {
+  const button = clear($("#analyze-btn"));
+  button.disabled = active;
+  if (active) button.append(el("span", { class: "spinner" }), " Analyzing…");
+  else button.textContent = "Analyze";
 }
 
 async function analyze(event) {
@@ -156,36 +164,58 @@ async function analyze(event) {
     return;
   }
 
-  const button = $("#analyze-btn");
-  button.disabled = true;
-  clear(button);
-  button.append(el("span", { class: "spinner" }), document.createTextNode(" Analyzing…"));
+  const input = { text, context, method };
+  state.pending = input;
+  state.last = null;
+  $("#report-btn").classList.add("hidden");
+  setAnalyzing(true);
   clear(alertBox);
   renderSkeleton();
 
   try {
-    const result = await API.post("/api/explain", { text, context, method });
-    renderResult(result);
+    const result = await API.post("/api/explain", input);
+    if (state.pending === input) renderResult(result, input);
   } catch (err) {
+    if (state.pending !== input) return;
     clear($("#results-body"));
     $("#results-body").append(el("div", { class: "empty", text: "Analysis failed." }));
     showAlert(alertBox, "error", err.message);
     $("#report-btn").classList.add("hidden");
   } finally {
+    if (state.pending === input) {
+      state.pending = null;
+      setAnalyzing(false);
+    }
+  }
+}
+
+async function validateImage(event) {
+  event.preventDefault();
+  const file = $("#image-file").files[0];
+  const alert = clear($("#image-alert"));
+  if (!file) return;
+  const body = new FormData();
+  body.append("image", file);
+  const button = $("#image-submit");
+  button.disabled = true;
+  try {
+    const result = await API.post("/api/vision-check", body);
+    showAlert(alert, "ok", `${result.format} · ${result.width} × ${result.height}. ${result.message}`);
+  } catch (err) {
+    showAlert(alert, "error", err.message);
+  } finally {
     button.disabled = false;
-    clear(button);
-    button.textContent = "Analyze";
   }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   const textarea = $("#post-text");
   const counter = $("#char-counter");
-  const updateCounter = () => {
-    const len = textarea.value.length;
+  const showCounter = (len) => {
     counter.textContent = `${len} / 5000`;
     counter.classList.toggle("over", len > 4800);
   };
+  const updateCounter = () => showCounter(textarea.value.length);
   textarea.addEventListener("input", updateCounter);
   updateCounter();
 
@@ -214,24 +244,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   $("#analyze-form").addEventListener("submit", analyze);
-  $("#reset-btn").addEventListener("click", () => {
+  $("#analyze-form").addEventListener("reset", () => {
+    state.pending = null;
+    state.last = null;
+    setAnalyzing(false);
     clear($("#results-body"));
     $("#results-body").append(el("div", { class: "empty", text: "No analysis yet. Submit a post to see the decision and explanation." }));
     clear($("#form-alert"));
     $("#report-btn").classList.add("hidden");
-    updateCounter();
+    showCounter(textarea.defaultValue.length);
   });
+  $("#image-form").addEventListener("submit", validateImage);
 
   $("#report-btn").addEventListener("click", () => {
     if (!state.last) return;
+    const { result, input } = state.last;
+    const verdict = threeWayVerdict(result);
     sessionStorage.setItem(
       "hatexai.feedback",
       JSON.stringify({
-        text: textarea.value,
-        context: $("#post-context").value,
-        predicted_label: state.last.decision || state.last.label,
-        probability_hate: state.last.probability_hate,
-        model_version: state.last.model ? state.last.model.version : "",
+        text: input.text,
+        context: input.context,
+        predicted_label: verdict === "review" ? "needs_review" : verdict,
+        probability_hate: result.probability_hate,
+        model_version: result.model?.version || null,
       })
     );
     window.location.href = "feedback.html";
