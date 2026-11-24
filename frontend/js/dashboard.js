@@ -269,7 +269,9 @@ async function loadDashboard() {
   }
   const available = data.available || {};
   for (const section of document.querySelectorAll("[data-artifact]")) {
-    section.classList.toggle("hidden", !available[section.dataset.artifact]);
+    const artifact = section.dataset.artifact;
+    const loaded = available[artifact] || (artifact === "comparison" && available.transformer_comparison);
+    section.classList.toggle("hidden", !loaded);
   }
   if (available.meme_pilot) {
     const pilot = available.meme_pilot;
@@ -298,7 +300,14 @@ async function loadDashboard() {
   renderManifest(available.run_manifest || available.baseline_training);
   renderHeadline(available.baseline_test, available.error_analysis);
   renderThreshold(available.threshold, available.test_three_way);
-  renderComparison(available.comparison);
+  const transformer = available.transformer_comparison;
+  renderComparison(transformer ? {
+    caveat: transformer.caveat,
+    systems: transformer.systems.map(({ model, metrics }) => ({
+      name: model, available: true, ...metrics,
+      note: `English F1 ${num(metrics.by_language.en?.f1_macro, 3)} · Hinglish F1 ${num(metrics.by_language["hi-en"]?.f1_macro, 3)}`,
+    })),
+  } : available.comparison);
   renderAblation(available.ablation);
   renderProbes(available.probes);
   renderFaithfulness(available.faithfulness);

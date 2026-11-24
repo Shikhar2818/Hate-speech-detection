@@ -1,5 +1,48 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## XLM-RoBERTa, attribution and explanation upgrade
+
+The advanced profile uses the existing canonical post/context fusion and saves the selected
+XLM-RoBERTa sequence classifier, tokenizer, settings and epoch history. The CPU pilot trained
+the last encoder layer and classifier head for two epochs. Both classifiers used the same
+stratified subsets of the checksummed bilingual splits: 768 train, 320 validation and 768 test.
+Validation selected the checkpoint and moderation thresholds. The full-corpus run is pending.
+
+| Classifier | Test accuracy | Macro F1 | English F1 | Hinglish F1 | AUROC | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| TF-IDF + logistic regression | 0.661 | 0.617 | 0.519 | 0.605 | 0.710 | 0.050 |
+| XLM-RoBERTa-base | 0.582 | 0.581 | 0.616 | 0.509 | 0.697 | 0.209 |
+
+The existing full-data TF-IDF app remains on port 8001. The opt-in XLM-R pilot runs on port
+8002. The pilot API served both checkpoints, LIME, occlusion, Integrated Gradients and SHAP.
+The two new attribution methods preserved the same scores and decisions in live checks.
+The saved classifier is under `outputs/xlmr-cpu-pilot/checkpoints/classifier/`.
+
+On 256 CADD context-bearing comments checked for training-post overlap, XLM-R macro F1 was
+0.544 on comment text and 0.466 when appending parent context. TF-IDF was 0.446 in both
+conditions. Neither pilot classifier trained on parent context. On a small attribution
+sample of four English and four Hinglish posts, SHAP-guided masking dropped the predicted-class
+score more than random masking in both groups, but the mean top-five overlap across two SHAP
+seeds was 0.336 and 0.153. Integrated Gradients top-five overlap across step counts was
+1.000 and 0.917, with guided masking beating random masking only in the Hinglish sample.
+The sample is too small for claims about typical attribution behavior.
+
+Pretrained Flan-T5 scored evidence-only rationale candidates in the live app. Human-reviewed
+train and test preference files were unavailable. DPO stopped before training and no
+optimized checkpoint or before/after quality result exists. The supplied evaluation command
+compares held-out human preferences once a trained policy and independent reviewed pairs exist.
+The comparison, context and attribution reports are under `outputs/xlmr-cpu-pilot/eval/`.
+The complete Python suite passed 77 tests. Headless Chrome rendered both sets of token
+attributions, the Flan-T5 rationale and both comparison rows. Regenerating the pilot split
+files reproduced their checksums.
+
+| Area | Files added or changed |
+| --- | --- |
+| Training and configuration | `configs/xlm_roberta.yaml`, `scripts/prepare_transformer_pilot.py`, `scripts/run_pipeline.py`, `src/hatexai/models/xlm_roberta.py`, `src/hatexai/train/train_transformer.py`, `requirements.txt` |
+| Evaluation and explanations | `experiments/compare_transformer.py`, `experiments/evaluate_transformer_xai.py`, `src/hatexai/xai/transformer.py`, `src/hatexai/inference.py`, `src/hatexai/models/llm_policy.py`, `src/hatexai/train/train_dpo.py` |
+| Dashboard and API | `backend/registry.py`, `backend/main.py`, `backend/schemas.py`, `frontend/js/analyze.js`, `frontend/js/dashboard.js` |
+| Tests and documentation | `tests/test_transformer_upgrade.py`, `tests/test_public_baseline.py`, `tests/test_dpo_alignment.py`, `README.md`, `PROJECT_AUDIT.md` |
+
 ## Expanded English and Hinglish training
 
 The text training set grew from 23,787 to 46,662 labeled posts. It adds 16,653 CADD training
@@ -23,7 +66,7 @@ false flags on the 20 non-hate examples fell from nine to one, while automatic c
 on short and implicit hate.
 
 The final checkpoint is `outputs/english-hinglish-v3/checkpoints/linear_baseline.joblib`.
-The CPU fit and initial validation took about 81 seconds. The model profile is
+The CPU fit and initial validation took about 81 seconds. The model profile
 `configs/english_hinglish_ngrams.yaml` powers the local bilingual app on port 8001. Metrics, thresholds, training metadata and local
 comparisons are under `outputs/english-hinglish-v3/eval/`. Both explanation methods passed
 the FastAPI check. The complete suite passed 70 tests.
@@ -171,6 +214,8 @@ This audit records what is *actually* in the repository versus what the README, 
 ---
 
 ## 1. Repository structure (as found)
+
+The numbered sections preserve the original audit. The updates above describe the current implementation.
 
 ```
 app/streamlit_app.py              # only UI

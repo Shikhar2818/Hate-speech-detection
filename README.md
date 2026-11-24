@@ -23,12 +23,84 @@ abstention outcome for ambiguous inputs.
 | English and Hinglish research profile | **Trained and evaluated locally on HateXplain and HiFoX** |
 | FastAPI backend (`/api/predict`, `/api/explain`, `/api/evaluation`, `/api/feedback`, …) | **Working, tested** |
 | HTML/CSS/JS dashboard (detection, explainability, evaluation, feedback, research) | **Working, tested** |
-| XLM-R / DistilBERT transformer classifier | **Implemented; no checkpoint trained in this environment** |
-| DPO rationale alignment (Flan-T5) | **Implemented and unit-tested; not trained here** |
+| XLM-RoBERTa-base classifier | **Fine-tuned and evaluated in a matched English/Hinglish CPU pilot** |
+| Integrated Gradients and SHAP | **Available in the XLM-RoBERTa profile** |
+| Flan-T5 rationale policy and DPO | **Pretrained Flan-T5 runs locally. DPO training and held-out preference evaluation require reviewed pairs.** |
 | Meme classification and image attributions | **Optional English pilot using TinyCLIP and captions. The gated XLM-R/CLIP trainer is a separate experiment.** |
 
 The default profile uses the calibrated word and character TF-IDF baseline. The optional research
 profile below enables a trained English and Hinglish model and an English meme pilot.
+
+## Advanced text profile
+
+```mermaid
+flowchart LR
+    A[Post and context] --> B[Shared preprocessing]
+    B --> C[XLM-RoBERTa-base]
+    B --> D[TF-IDF and logistic regression]
+    C --> E[Probabilities and moderation decision]
+    D --> E
+    C --> F[Integrated Gradients or SHAP]
+    F --> G[Flan-T5 ranks grounded rationale candidates]
+    E --> G
+    H[Human-reviewed preference pairs] --> I[DPO explanation policy]
+    I --> G
+```
+
+Install the requirements below and prepare the expanded bilingual data from the pinned sources in
+the research profile. Run these commands in PowerShell from the repository root.
+
+```powershell
+hf download google/flan-t5-small config.json generation_config.json tokenizer.json tokenizer_config.json special_tokens_map.json model.safetensors --local-dir outputs/encoders/flan-t5-small
+python scripts/prepare_transformer_pilot.py --output outputs/xlmr-cpu-pilot
+$env:OMP_NUM_THREADS = "4"
+python scripts/run_pipeline.py --config outputs/xlmr-cpu-pilot/config.yaml --stage transformer
+python scripts/run_pipeline.py --config outputs/xlmr-cpu-pilot/config.yaml --stage baseline
+python experiments/compare_transformer.py --config outputs/xlmr-cpu-pilot/config.yaml
+python experiments/evaluate_transformer_xai.py --config outputs/xlmr-cpu-pilot/config.yaml
+python experiments/compare_transformer.py --config outputs/xlmr-cpu-pilot/config.yaml --context-manifest data/processed/cadd-v1/manifest.json
+$env:HATEXAI_CONFIG = "outputs/xlmr-cpu-pilot/config.yaml"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8002
+```
+
+For the full 46,662-row training set, use `configs/xlm_roberta.yaml` for training, comparison
+and serving. Start with the existing TF-IDF checkpoint from the character 3–5-gram run. The full
+profile trains the last four encoder layers and the head by default. Set `train_encoder_layers`
+to 12 to fine-tune the whole encoder. CUDA requires a CUDA-enabled PyTorch build. Tune batch
+size and sequence length to available VRAM. CPU runs use host RAM and are substantially slower
+on the full corpus. Allow a few GB of disk space for pretrained and saved weights.
+
+The app loads a saved classifier and its validation-selected cutoffs. An absent or invalid
+XLM-R checkpoint or evaluation triggers the configured TF-IDF fallback. The profile identifies
+the loaded classifier and available methods in `GET /api/model-info`. Set `classifier: "baseline"`
+in prediction or explanation requests to compare with TF-IDF. For example:
+
+```json
+{"text":"Aaj library open hai. Everyone is welcome.","context":"","method":"integrated_gradients"}
+```
+
+Submit that body to `POST /api/explain`. XLM-R also supports `shap`, with more forward passes
+on longer inputs. Both methods explain the predicted binary class and show token scores,
+guided versus random masking, and an independent review verdict. Flan-T5 selects among concise
+evidence-only rationales and can include uncertainty language. Qualitative intent and label
+disagreements still require a human reviewer.
+
+To train and evaluate DPO, supply separate reviewed `reviewed_train.jsonl` and
+`reviewed_test.jsonl` files at the paths in the full config. Each row needs `id`, `text`,
+optional `context`, the reviewed classifier-evidence `prompt`, `chosen_explanation`,
+`rejected_explanation`, `review_status: "accepted"` and `reviewer_id`. Use distinct source
+posts between splits. No feedback submissions are imported automatically.
+
+```powershell
+python scripts/run_pipeline.py --config configs/xlm_roberta.yaml --stage dpo
+python scripts/run_pipeline.py --config configs/xlm_roberta.yaml --stage dpo-eval
+```
+
+The comparison reports are in the profile's evaluation directory. The pilot used 768 stratified
+training posts, 320 validation posts and 768 test posts per model. It measures English HateXplain
+and Hinglish HiFoX performance in their respective corpora. The comparison cannot isolate
+language from dataset effects. DPO evaluates agreement with held-out human preferences by
+completion scores. This is a separate explanation measure and leaves classifier weights independent.
 
 ---
 
@@ -131,7 +203,7 @@ python -m pytest tests -q
 
 ---
 
-## Architecture
+## Baseline and multimodal research paths
 
 ```
 text + context ──► canonical fusion ──► TF-IDF (word+char) ──► logistic regression ──► Platt calibration
@@ -220,7 +292,7 @@ FPR **0.500** and FNR **0.083** — recall is bought with false positives. The m
 - Cross-validation is over **24 training examples**. The ablation is directional, not conclusive.
 - The probe set is **author-constructed**, deliberately adversarial, and not a public benchmark. It is useful
   because it exposes failure modes, and it is labelled as contested where the label itself is debatable.
-- No transformer or DPO result is reported because neither was trained here.
+- These demo results cover the baseline. The advanced profile reports the separate XLM-R CPU pilot.
 
 **Baseline reference (pre-improvement):** the original char-only baseline scored acc 0.667 / AUROC 0.778 on the
 test split and 0.639 on the probes; the audit documents why.
@@ -367,7 +439,7 @@ backend/                  FastAPI app, schemas, model registry, feedback store
 frontend/                 HTML/CSS/JS dashboard
 experiments/              reproducible experiment runner → outputs/eval/*.json
 configs/                  default (GPU) and cpu configs, with baseline + decision-policy settings
-tests/                    40 tests: metrics, thresholds, robustness, XAI, DPO alignment, API
+tests/                    metrics, thresholds, robustness, XAI, DPO alignment, API
 paper/                    ACL draft and bibliography
 slides/                   defense deck
 ```

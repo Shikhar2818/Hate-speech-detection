@@ -39,7 +39,7 @@ function renderSkeleton() {
   );
 }
 
-function renderTokens(tokens, scores) {
+function renderTokens(tokens, scores, positiveLabel = "hate", negativeLabel = "non-hate") {
   const max = Math.max(1e-6, ...scores.map((s) => Math.abs(s)));
   return el(
     "div",
@@ -52,7 +52,7 @@ function renderTokens(tokens, scores) {
         class: `tok ${cls}`,
         text: token,
         title: cls === "neutral" ? "Little or no measured influence"
-          : `${score >= 0 ? "+" : ""}${score.toFixed(4)} (${score > 0 ? "pushes toward hate" : "pushes toward non-hate"})`,
+          : `${score >= 0 ? "+" : ""}${score.toFixed(4)} (${score > 0 ? positiveLabel : negativeLabel} contribution)`,
         style: cls === "neutral" ? "" : `opacity:${(0.45 + 0.55 * magnitude).toFixed(2)}`,
       });
       return node;
@@ -90,6 +90,8 @@ function renderResult(result, input) {
       text: `Scores at or above ${pct(high)} flag Hate. Scores at or below ${pct(low)} show Non-hate. Scores in between go to review.` }));
   }
   body.append(bars);
+  body.append(el("p", { class: "muted small",
+    text: `${result.model.classifier || result.model.version} · Non-hate ${pct(result.probability_non_hate)} · Class confidence ${pct(result.confidence)}` }));
 
   // Uncertainty + faithfulness tiles
   const unc = result.uncertainty || {};
@@ -121,10 +123,13 @@ function renderResult(result, input) {
   );
 
   // Tokens
-  body.append(el("h3", { style: "margin-top:22px", text: `Influential tokens (${exp.method})` }));
-  body.append(renderTokens(exp.tokens || [], exp.scores || []));
+  const methods = { integrated_gradients: "Integrated Gradients", shap: "SHAP", lime: "LIME", occlusion: "Occlusion" };
+  const targetsPrediction = ["integrated_gradients", "shap"].includes(exp.method);
+  const target = targetsPrediction && result.label_id === 0 ? "non-hate" : "hate";
+  body.append(el("h3", { style: "margin-top:22px", text: `Influential tokens (${methods[exp.method] || exp.method})` }));
+  body.append(renderTokens(exp.tokens || [], exp.scores || [], `supports ${target}`, `opposes ${target}`));
   body.append(
-    el("p", { class: "muted small", text: "Red pushes toward hate; green pushes toward non-hate. Opacity reflects attribution magnitude." })
+    el("p", { class: "muted small", text: `Red supports the ${target} score. Green opposes it. Opacity reflects attribution magnitude.` })
   );
 
   // Keep the moderation verdict and token evidence visible in the same result.
@@ -132,6 +137,10 @@ function renderResult(result, input) {
   body.append(
     el("div", { class: "chips" }, (exp.top_evidence || []).map((t) => el("span", { class: "chip", text: t })))
   );
+  if (exp.generated_rationale) {
+    body.append(el("h3", { style: "margin-top:20px", text: "Flan-T5 explanation" }),
+      el("p", { text: exp.generated_rationale }));
+  }
   body.append(el("div", { class: "disclaimer", style: "margin-top:12px",
     text: "The highlights explain which tokens changed the score. A human reviewer can assess intent and context." }));
 
@@ -294,9 +303,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const [evaluation, info] = await Promise.all([API.get("/api/evaluation"), API.get("/api/model-info")]);
     state.operating = (evaluation.available && evaluation.available.threshold) || null;
-    $("#analysis-scope").textContent = info.supported_languages.length
+    const bounds = info.active_classifier?.decision_bounds;
+    if (bounds) state.operating = { low: bounds[0], high: bounds[1] };
+    const scope = info.supported_languages.length
       ? `Held-out text evaluation: ${info.supported_languages.join(" and ")}.`
       : "The demo profile uses a small synthetic dataset.";
+    const checkpoint = info.active_classifier?.classifier || "Classifier unavailable";
+    $("#analysis-scope").textContent = `${checkpoint}. ${info.evaluation?.scope || scope}`;
+    const methodNames = { integrated_gradients: "Integrated Gradients", shap: "SHAP",
+      lime: "LIME (local surrogate)", occlusion: "Occlusion (token removal)" };
+    if (info.explanation_methods.length) {
+      const select = clear($("#method"));
+      select.append(...info.explanation_methods.map((method) =>
+        el("option", { value: method, text: methodNames[method] || method })));
+    }
     if (info.modalities.image) {
       state.memeEnabled = true;
       $("#image-heading").textContent = "Analyze an English meme (research pilot)";

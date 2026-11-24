@@ -55,6 +55,56 @@ def test_unverified_training_file_stops_before_fitting(benchmark_config):
     assert not Path(benchmark_config["output_dir"]).exists()
 
 
+def test_missing_transformer_falls_back_and_reports_real_model(benchmark_config, tmp_path, monkeypatch):
+    run_public_baseline(benchmark_config)
+    benchmark_config["model_version"] = "local-baseline"
+    benchmark_config["transformer"] = {
+        "enabled": True, "checkpoint": str(tmp_path / "missing"), "evaluation_dir": str(tmp_path / "missing"),
+        "model_version": "unavailable-transformer",
+    }
+    monkeypatch.setattr(registry, "_config", benchmark_config)
+    monkeypatch.setattr(registry, "_service", None)
+    with TestClient(create_app()) as client:
+        assert client.get("/health").json()["model_version"] == "local-baseline"
+        info = client.get("/api/model-info").json()
+        assert info["transformer_status"] == "baseline fallback"
+        body = {"text": "blue sky", "method": "integrated_gradients"}
+        assert client.post("/api/explain", json=body).status_code == 422
+        assert client.post("/api/predict", json={"text": "blue sky", "classifier": "baseline"}).json()[
+            "model"
+        ]["type"] == "linear-calibrated"
+
+
+def test_transformer_comparison_writes_same_split_metrics(benchmark_config, tmp_path, monkeypatch):
+    from experiments import compare_transformer
+    from hatexai.utils import ensure_dir
+
+    run_public_baseline(benchmark_config)
+    manifest_path = Path(benchmark_config["data"]["manifest_path"])
+    checkpoint = ensure_dir(tmp_path / "transformer")
+    write_json(checkpoint / "training.json", {"manifest_sha256": file_digest(manifest_path)})
+    benchmark_config.update(device="cpu", transformer={
+        "checkpoint": str(checkpoint), "evaluation_dir": str(tmp_path / "reports"),
+        "max_length": 16, "batch_size": 4,
+    })
+
+    class TransformerFixture:
+        def __init__(self, *args):
+            self.model = load_linear_baseline(
+                Path(benchmark_config["output_dir"]) / "checkpoints" / "linear_baseline.joblib",
+            )
+
+        def predict_proba(self, texts):
+            return self.model.predict_proba(texts)
+
+    monkeypatch.setattr(compare_transformer, "XLMClassifier", TransformerFixture)
+    report = compare_transformer.compare(benchmark_config)
+    assert len(report["systems"]) == 2
+    assert all(model["metrics"]["by_language"]["en"]["n"] == 24 for model in report["systems"])
+    assert (tmp_path / "reports" / "transformer_comparison.md").is_file()
+    assert load_json(tmp_path / "reports" / "transformer_comparison.json") == report
+
+
 def test_benchmark_checkpoint_policy_and_analytics_are_served(benchmark_config, tmp_path, monkeypatch):
     benchmark_config.update(benchmark_name="HateXplain", model_version="linear-hatexplain-test")
     results = run_public_baseline(benchmark_config)

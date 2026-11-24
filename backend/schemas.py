@@ -10,12 +10,13 @@ MAX_TEXT_CHARS = 5000
 MAX_CONTEXT_CHARS = 2000
 MAX_COMMENT_CHARS = 2000
 
-ExplanationMethod = Literal["lime", "occlusion"]
+ExplanationMethod = Literal["lime", "occlusion", "integrated_gradients", "shap"]
 
 
 class PredictRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=MAX_TEXT_CHARS)
     context: str = Field("", max_length=MAX_CONTEXT_CHARS)
+    classifier: Literal["primary", "baseline"] = "primary"
 
     @field_validator("text")
     @classmethod
@@ -45,6 +46,7 @@ class Explanation(BaseModel):
     rationale: str
     faithfulness: dict[str, float | None]
     disclaimer: str
+    generated_rationale: str | None = None
 
 
 class PredictionResponse(BaseModel):
@@ -59,6 +61,7 @@ class PredictionResponse(BaseModel):
     normalized_text: str
     uncertainty: Uncertainty
     model: dict[str, Any]
+    needs_review: bool = False
 
 
 class ExplainResponse(PredictionResponse):

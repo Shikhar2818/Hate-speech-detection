@@ -45,6 +45,11 @@ class LinearHateService:
     the default backend. The class is model-agnostic in its explanation logic:
     any ``predict_proba`` callable can be substituted.
     """
+    model_type = "linear-calibrated"
+    model_name = "TF-IDF + logistic regression"
+    methods = ("lime", "occlusion")
+    generator = None
+    generator_status = "not configured"
 
     def __init__(self, model_path: str | Path, lime_samples: int = 120,
                  decision_bounds: tuple[float, float] | None = None):
@@ -87,6 +92,8 @@ class LinearHateService:
         method: str = "lime",
         gold_label: int | None = None,
     ) -> dict[str, Any]:
+        if method not in self.methods:
+            raise ValueError(f"Explanation method {method} is unavailable for {self.model_name}")
         result, fused = self._score(text, context)
         label = result["label_id"]
         prob = result["confidence"]
@@ -133,6 +140,54 @@ class LinearHateService:
             result["offline_reward"] = heuristic_reward(
                 result["normalized_text"], rationale, gold_label=gold_label, predicted_label=label
             )
+        self.add_generated_explanation(result, text, context)
+        return result
+
+    def add_generated_explanation(self, result, text, context):
+        if self.generator is None:
+            return
+        explanation = result["explanation"]
+        original = (text.casefold(), context.casefold())
+        evidence = [token for token in explanation["top_evidence"]
+                    if sum(char.isalnum() for char in token) >= 2
+                    and any(token.casefold() in passage for passage in original)]
+        try:
+            explanation["generated_rationale"] = self.generator.grounded_rationale(
+                text, context, result["label"], result["confidence"], result.get("decision") or result["label"], evidence,
+            )
+        except (RuntimeError, ValueError):
+            explanation["generated_rationale"] = None
+
+
+class TransformerHateService(LinearHateService):
+    model_type = "xlm-roberta"
+    model_name = "XLM-RoBERTa-base"
+    methods = ("integrated_gradients", "shap", "lime", "occlusion")
+
+    def __init__(self, classifier, bounds, xai):
+        self.classifier, self.decision_bounds, self.xai = classifier, bounds, xai
+        self.lime_samples = int(xai.get("lime_samples", 120))
+
+    def predict_proba_texts(self, texts):
+        return self.classifier.predict_proba(texts)
+
+    def analyze(self, text, context="", method="integrated_gradients", gold_label=None):
+        if method in ("lime", "occlusion"):
+            return super().analyze(text, context, method, gold_label)
+        from hatexai.xai.transformer import explain_tokens
+
+        result, fused = self._score(text, context)
+        label, confidence = result["label_id"], result["confidence"]
+        tokens, scores, faith = explain_tokens(self.classifier, fused, label, method, self.xai)
+        evidence_count = sum(abs(score) > 1e-8 for score in scores)
+        evidence = top_k_tokens(tokens, scores, k=min(int(self.xai.get("top_k_tokens", 8)), evidence_count))
+        result["explanation"] = {
+            "method": method, "predicted_label": label, "predicted_prob": confidence,
+            "tokens": tokens, "scores": scores, "top_evidence": evidence, "faithfulness": faith,
+            "rationale": format_rationale(label, confidence, evidence, method),
+            "disclaimer": "Attributions describe model scores. A human reviewer can assess intent and context.",
+        }
+        self.add_generated_explanation(result, text, context)
         return result
 
 

@@ -13,7 +13,9 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.registry import MODEL_VERSION, PROJECT_ROOT, get_config, get_service
+from backend.registry import (
+    MODEL_VERSION, PROJECT_ROOT, get_baseline_service, get_config, get_service, transformer_report,
+)
 from backend.schemas import (
     ExplainRequest,
     ExplainResponse,
@@ -66,8 +68,16 @@ def _evaluation_dir() -> Path:
     return EVAL_DIR
 
 
-def _model_version() -> str:
-    return get_config().get("model_version", MODEL_VERSION)
+def _model_version(service=None) -> str:
+    config = get_config()
+    if service is not None and service.model_type == "xlm-roberta":
+        return config["transformer"]["model_version"]
+    return config.get("model_version", MODEL_VERSION)
+
+
+def _prediction_model(service):
+    return {"name": "HateXAI", "classifier": service.model_name, "version": _model_version(service),
+            "type": service.model_type, "decision_bounds": service.decision_bounds}
 
 
 def _meme_output(config: dict[str, Any]) -> Path | None:
@@ -119,6 +129,11 @@ def _read_image(upload: UploadFile):
 
 def _model_info() -> dict[str, Any]:
     config = get_config()
+    try:
+        service = get_service()
+    except (OSError, RuntimeError, ValueError, KeyError):
+        service = None
+    model = _prediction_model(service) if service is not None else None
     benchmark = config.get("benchmark_name")
     languages = config.get("benchmark_languages", ["English"] if benchmark else [])
     meme_available = _meme_output(config) is not None
@@ -137,13 +152,20 @@ def _model_info() -> dict[str, Any]:
     )
     return {
         "name": "HateXAI",
-        "version": _model_version(),
+        "version": _model_version(service),
+        "active_classifier": model,
+        "checkpoint_loaded": service is not None,
+        "explanation_policy": service.generator_status if service is not None else "unavailable",
+        "transformer_status": (
+            "loaded" if model and model["type"] == "xlm-roberta"
+            else "baseline fallback" if config.get("transformer", {}).get("enabled") else "not configured"
+        ),
         "architecture": {
-            "served_model": "TF-IDF (word + char n-grams) + logistic regression, Platt-calibrated",
+            "served_model": model["classifier"] if model else "Unavailable",
             "optional_models": [
-                "XLM-RoBERTa text+context encoder (implemented, no checkpoint in this environment)",
-                "gated CLIP vision fusion (implemented, requires image-labelled data)",
-                "Flan-T5 explanation policy with DPO preference alignment (implemented, untrained here)",
+                "TF-IDF baseline",
+                "gated CLIP vision fusion",
+                "Flan-T5 explanation policy",
             ],
         },
         "supported_languages": languages,
@@ -154,9 +176,10 @@ def _model_info() -> dict[str, Any]:
             "image_note": "Research pilot for English memes with a supplied caption."
             if meme_available else "Image file validation is available.",
         },
-        "explanation_methods": ["lime", "occlusion"],
+        "explanation_methods": list(service.methods) if service is not None else [],
         "evaluation": {
             "artifacts_available": _evaluation_dir().exists(),
+            "scope": config.get("comparison_scope"),
             "note": "Metrics are read from the configured model's evaluation directory.",
         },
         "known_limitations": [
@@ -205,13 +228,14 @@ def create_app() -> FastAPI:
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         try:
-            service_loaded = get_service() is not None
+            service = get_service()
         except Exception:
-            service_loaded = False
+            service = None
+        service_loaded = service is not None
         return HealthResponse(
             status="ok" if service_loaded else "degraded",
             model_loaded=service_loaded,
-            model_version=_model_version(),
+            model_version=_model_version(service),
             artifacts_present=_evaluation_dir().exists(),
         )
 
@@ -224,24 +248,28 @@ def create_app() -> FastAPI:
         # Model loading happens inside the try so a failed/absent checkpoint
         # returns a clean 500 rather than an unhandled server error.
         try:
-            service = get_service()
+            service = get_baseline_service() if payload.classifier == "baseline" else get_service()
             result = service.predict(payload.text, payload.context)
         except Exception as exc:  # noqa: BLE001 - surface a clean error, log details server-side
             print(f"[predict] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Inference failed. The model may be unavailable.") from exc
-        result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
+        result.update(model=_prediction_model(service), needs_review=result.get("decision") == "needs_review")
         record_prediction(result)
         return result
 
     @app.post("/api/explain", response_model=ExplainResponse, dependencies=[Depends(rate_limit)])
     def explain(payload: ExplainRequest) -> dict[str, Any]:
         try:
-            service = get_service()
+            service = get_baseline_service() if payload.classifier == "baseline" else get_service()
+            if payload.method not in service.methods:
+                raise HTTPException(status_code=422, detail=f"Method unavailable for {service.model_name}")
             result = service.analyze(payload.text, payload.context, method=payload.method)
+        except HTTPException:
+            raise
         except Exception as exc:  # noqa: BLE001
             print(f"[explain] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Explanation failed. The model may be unavailable.") from exc
-        result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
+        result.update(model=_prediction_model(service), needs_review=result.get("decision") == "needs_review")
         record_prediction(result)
         return result
 
@@ -314,6 +342,19 @@ def create_app() -> FastAPI:
                 out["missing"].append(key)
                 continue
             out["available"][key] = artifact
+        if "transformer" in get_config():
+            try:
+                config = get_config()
+                report = transformer_report(config)
+                out["available"]["transformer_comparison"] = report
+                path = Path(config["transformer"]["evaluation_dir"]) / "transformer_xai.json"
+                if path.is_file():
+                    explanations = load_json(path)
+                    if all(explanations.get(key) == report.get(key)
+                           for key in ("classifier_training_sha256", "test_sha256")):
+                        out["available"]["transformer_xai"] = explanations
+            except (OSError, ValueError, KeyError):
+                out["missing"].append("transformer_comparison")
         out["run_hint"] = (
             "python scripts/run_pipeline.py --config configs/hatexplain_baseline.yaml --stage baseline"
             if get_config().get("benchmark_name") == "HateXplain"
