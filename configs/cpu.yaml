@@ -36,6 +36,7 @@ train:
 
 dpo:
   policy_model: google/flan-t5-small
+  preferences_path: data/processed/dpo/reviewed_train.jsonl
   beta: 0.1
   epochs: 1
   batch_size: 2

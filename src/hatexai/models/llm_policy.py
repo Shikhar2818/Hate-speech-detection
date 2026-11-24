@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -29,23 +27,25 @@ class ExplanationPolicy:
         return self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
     def logprob_of_completion(self, source: str, target: str) -> torch.Tensor:
-        """Sum of token log-probabilities of ``target`` given ``source``.
-
-        Uses the same shifted alignment as DPO training so the two agree;
-        the previous version reduced algebraically to ``-outputs.loss`` and
-        returned the wrong quantity (PROJECT_AUDIT.md section 3.3).
-        """
-        source_enc = self.tokenizer(source, return_tensors="pt", truncation=True, max_length=384).to(self.device)
-        target_enc = self.tokenizer(target, return_tensors="pt", truncation=True, max_length=128).to(self.device)
-        labels = target_enc["input_ids"].clone()
-        labels[labels == self.tokenizer.pad_token_id] = -100
-        outputs = self.model(**source_enc, labels=labels)
-        shift_logits = outputs.logits[:, :-1, :]
-        shift_labels = labels[:, 1:]
-        logp = torch.nn.functional.log_softmax(shift_logits, dim=-1)
-        gathered = logp.gather(-1, shift_labels.clamp(min=0).unsqueeze(-1)).squeeze(-1)
-        mask = shift_labels != -100
-        return (gathered * mask).sum()
+        """Sum of token log-probabilities of ``target`` given ``source``."""
+        totals, _ = completion_logprobs(self, [source], [target])
+        return totals[0]
 
     def trainable_parameters(self):
         return self.model.parameters()
+
+
+def completion_logprobs(policy, sources, targets, *, max_source_length=384, max_target_length=128):
+    """Return token log-probability sums and valid token counts per completion."""
+    source = policy.tokenizer(
+        sources, padding=True, truncation=True, max_length=max_source_length, return_tensors="pt",
+    ).to(policy.device)
+    target = policy.tokenizer(
+        targets, padding=True, truncation=True, max_length=max_target_length, return_tensors="pt",
+    ).to(policy.device)
+    labels = target["input_ids"].masked_fill(target["input_ids"] == policy.tokenizer.pad_token_id, -100)
+    # T5 shifts the decoder inputs internally when labels are provided.
+    logits = policy.model(**source, labels=labels).logits
+    valid = labels != -100
+    token_logp = logits.log_softmax(dim=-1).gather(-1, labels.clamp(min=0).unsqueeze(-1)).squeeze(-1)
+    return token_logp.masked_fill(~valid, 0).sum(dim=1), valid.sum(dim=1)

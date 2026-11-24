@@ -46,6 +46,15 @@ probability drop after removing the five selected tokens was 0.096 versus 0.031 
 deletion. Mean retained probability was 0.832 versus 0.757. These are perturbation measurements
 for this checkpoint and do not assess generated rationales or intent.
 
+## DPO validation update (2026-11-24)
+
+The historical recommendation in section 3.2 misidentified the T5 alignment. Passing `labels` to T5
+already shifts the decoder inputs, so shifting output logits and labels again mis-scores the completion.
+The trainer now uses the same score implementation as the explanation policy and a tiny T5 regression
+test compares it directly with the framework loss. The trainer accepts a separate reviewed-pair file,
+rejects empty or unreviewed input, and saves loss history alongside a completed checkpoint.
+An independent human-reviewed corpus is still needed for a Flan-T5 research run.
+
 ---
 
 **Audit date:** 2026-10-13
