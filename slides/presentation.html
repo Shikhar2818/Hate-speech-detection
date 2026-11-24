@@ -111,18 +111,41 @@
         <div class="card">Python package <code>hatexai</code></div>
         <div class="card">Synthetic multilingual JSONL for a CPU dry run</div>
         <div class="card">TF-IDF baseline + XLM-R classifier + DPO trainer</div>
-        <div class="card">Streamlit demo for live explanations</div>
+        <div class="card">FastAPI backend + plain HTML/CSS/JS dashboard (no Streamlit)</div>
       </div>
       <p class="footer">Public data adapters: HateXplain, HASOC, Hateful Memes / MMHS150K.</p>
     </section>
 
     <section>
+      <h2>Evaluation — measured, not hypothetical</h2>
+      <p class="muted">Reproduce with <code>python experiments/run_experiments.py</code>.</p>
+      <div class="grid">
+        <div class="card"><strong>Baseline (char, legacy)</strong><br/>test acc 0.667 · probe acc 0.639</div>
+        <div class="card"><strong>Improved (word+char, calibrated)</strong><br/>test acc 1.000 · probe acc 0.750 · ECE 0.271</div>
+        <div class="card"><strong>Trade-off</strong><br/>calibration cuts Brier 0.20 → 0.09; ECE rises without Platt scaling</div>
+      </div>
+      <p>Test split is n = 6, so only the probe set (n = 36, adversarial) is informative — and it still fails on quoted hate and counterspeech.</p>
+    </section>
+
+    <section>
       <h2>Evaluation plan</h2>
       <ul>
-        <li>Classification: accuracy, macro-F1, precision, recall, AUROC.</li>
-        <li>Explanation: comprehensiveness, mean reward, qualitative cases.</li>
-        <li>Fairness: false-positive rate by language and code-mix flag.</li>
-        <li>Ablations: text-only vs +context vs +vision vs +DPO.</li>
+        <li>Classification: accuracy, macro-F1, per-class F1, AUROC, confusion matrix.</li>
+        <li>Calibration: Brier score and expected calibration error (ECE).</li>
+        <li>Decision: cost-weighted threshold + three-way hate / non-hate / needs-review.</li>
+        <li>Robustness: author-constructed adversarial probe set, per category.</li>
+        <li>Explanation: comprehensiveness and sufficiency under masking.</li>
+        <li>Fairness: macro-F1 and FPR/FNR by language, with small-group guards.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What is deliberately not claimed</h2>
+      <ul>
+        <li>No imagery or meme analysis — no vision model is trained or evaluated.</li>
+        <li>No headline benchmark numbers — the shipped corpus is a 30-record wiring set.</li>
+        <li>No "reinforcement learning" label: the reward loop is offline DPO over rationale preferences.</li>
+        <li>Attribution is not evidence of intent, and generated rationales are shown separately from model evidence.</li>
       </ul>
     </section>
 
@@ -149,7 +172,7 @@
       <h2>Thank you</h2>
       <p>Questions and discussion.</p>
       <p class="muted">HateXAI · Bennett University · Guided by Dr. Pradeepika Verma</p>
-      <p>Quick start: <code>python scripts/run_pipeline.py --stage baseline</code> then <code>streamlit run app/streamlit_app.py</code></p>
+      <p>Quick start: <code>python experiments/run_experiments.py</code> then <code>uvicorn backend.main:app</code> and open the frontend at the same origin.</p>
     </section>
   </div>
 </body>

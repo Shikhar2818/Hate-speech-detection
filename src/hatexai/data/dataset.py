@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-from hatexai.data.preprocess import extract_text_features
+from hatexai.data.preprocess import extract_text_features, fuse_text
 from hatexai.utils import read_jsonl
 
 
@@ -31,11 +31,19 @@ class HateExample:
 class MultimodalHateDataset(Dataset):
     """Dataset for x_i = {T_i, V_i, C_i} with optional preference explanations."""
 
-    def __init__(self, path: str | Path, tokenizer=None, image_processor=None, max_length: int = 256):
+    def __init__(
+        self,
+        path: str | Path,
+        tokenizer=None,
+        image_processor=None,
+        max_length: int = 256,
+        include_metadata: bool = False,
+    ):
         self.records = [self._to_example(item) for item in read_jsonl(path)]
         self.tokenizer = tokenizer
         self.image_processor = image_processor
         self.max_length = max_length
+        self.include_metadata = include_metadata
 
     def __len__(self) -> int:
         return len(self.records)
@@ -73,12 +81,14 @@ class MultimodalHateDataset(Dataset):
         return item
 
     def _fuse_text(self, example: HateExample) -> str:
-        parts = [f"Text: {example.text}"]
-        if example.context:
-            parts.append(f"Context: {example.context}")
-        parts.append(f"Language: {example.language}")
-        parts.append(f"CodeMixed: {int(example.code_mixed)}")
-        return " [SEP] ".join(parts)
+        # Shared with the linear baseline via fuse_text (PROJECT_AUDIT.md 3.6).
+        return fuse_text(
+            example.text,
+            example.context,
+            language=example.language,
+            code_mixed=example.code_mixed,
+            include_metadata=self.include_metadata,
+        )
 
     def _load_image(self, path: str | None) -> Image.Image:
         if path and Path(path).exists():

@@ -49,11 +49,23 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
 
 
 def write_jsonl(path: str | Path, records: Iterable[dict[str, Any]]) -> None:
+    """Write JSONL, refusing to emit non-standard NaN/Infinity tokens.
+
+    ``allow_nan=False`` turns a stray ``float('nan')`` into an error at write
+    time instead of a file that ``JSON.parse`` rejects in the browser
+    (PROJECT_AUDIT.md section 3.5).
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+            handle.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
+
+
+def write_json(path: str | Path, payload: Any) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
 
 def ensure_dir(path: str | Path) -> Path:

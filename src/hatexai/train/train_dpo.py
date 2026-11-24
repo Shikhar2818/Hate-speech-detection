@@ -15,6 +15,13 @@ from hatexai.utils import ensure_dir, resolve_device, set_seed
 
 
 def _sequence_logprob(policy: ExplanationPolicy, sources: list[str], targets: list[str]) -> torch.Tensor:
+    """Mean token log-probability of ``targets`` given ``sources``.
+
+    For encoder-decoder models ``logits[t]`` predicts ``labels[t+1]``, so the
+    logits and labels must be shifted by one before gathering. Skipping the
+    shift (as an earlier revision did) optimises a quantity that is not the
+    model's likelihood of the explanation — see PROJECT_AUDIT.md section 3.2.
+    """
     enc_src = policy.tokenizer(
         sources, padding=True, truncation=True, max_length=384, return_tensors="pt"
     ).to(policy.device)
@@ -25,9 +32,12 @@ def _sequence_logprob(policy: ExplanationPolicy, sources: list[str], targets: li
     pad_id = policy.tokenizer.pad_token_id
     labels[labels == pad_id] = -100
     outputs = policy.model(**enc_src, labels=labels)
-    logp = torch.nn.functional.log_softmax(outputs.logits, dim=-1)
-    gathered = logp.gather(-1, labels.clamp(min=0).unsqueeze(-1)).squeeze(-1)
-    mask = labels != -100
+
+    shift_logits = outputs.logits[:, :-1, :]
+    shift_labels = labels[:, 1:]
+    logp = torch.nn.functional.log_softmax(shift_logits, dim=-1)
+    gathered = logp.gather(-1, shift_labels.clamp(min=0).unsqueeze(-1)).squeeze(-1)
+    mask = shift_labels != -100
     return (gathered * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
 
 

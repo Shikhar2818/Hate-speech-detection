@@ -9,6 +9,11 @@ data:
   max_text_length: 256
   image_size: 224
 
+baseline:
+  feature_set: union        # char | word | union (see ablation in experiments/)
+  calibrate: true           # Platt scaling; improves ECE/Brier, ranking unchanged
+  calibration_cv: 3
+
 model:
   text_encoder: xlm-roberta-base
   vision_encoder: openai/clip-vit-base-patch32
@@ -27,6 +32,7 @@ train:
   warmup_ratio: 0.06
   grad_clip: 1.0
   log_every: 10
+  early_stopping_patience: 2
 
 dpo:
   policy_model: google/flan-t5-small
@@ -44,5 +50,9 @@ xai:
   top_k_tokens: 8
 
 eval:
-  metrics: [accuracy, f1_macro, f1_weighted, precision, recall, auroc]
+  metrics: [accuracy, f1_macro, f1_weighted, precision, recall, auroc, brier, ece]
   fairness_groups: [language, modality]
+  # Decision policy: three-way hate / non-hate / needs_review.
+  fn_cost: 5.0              # relative cost of leaving hate speech up
+  fp_cost: 1.0              # relative cost of hiding a benign post
+  review_band: 0.10         # width of the abstention band around the threshold

@@ -9,6 +9,11 @@ data:
   max_text_length: 192
   image_size: 224
 
+baseline:
+  feature_set: union
+  calibrate: true
+  calibration_cv: 3
+
 model:
   text_encoder: distilbert-base-multilingual-cased
   vision_encoder: openai/clip-vit-base-patch32
@@ -27,6 +32,7 @@ train:
   warmup_ratio: 0.06
   grad_clip: 1.0
   log_every: 5
+  early_stopping_patience: 1
 
 dpo:
   policy_model: google/flan-t5-small
@@ -44,5 +50,8 @@ xai:
   top_k_tokens: 6
 
 eval:
-  metrics: [accuracy, f1_macro, f1_weighted, precision, recall, auroc]
+  metrics: [accuracy, f1_macro, f1_weighted, precision, recall, auroc, brier, ece]
   fairness_groups: [language, modality]
+  fn_cost: 5.0
+  fp_cost: 1.0
+  review_band: 0.10

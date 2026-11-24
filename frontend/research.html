@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Research &amp; model info — HateXAI</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-page="research">
+<header class="site-header">
+  <div class="container inner">
+    <a class="brand" href="index.html">
+      <span class="logo" aria-hidden="true"></span>
+      <span>HateXAI <small>Explainable moderation research</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a data-nav="home" href="index.html">Overview</a>
+      <a data-nav="analyze" href="analyze.html">Analyze</a>
+      <a data-nav="dashboard" href="dashboard.html">Evaluation</a>
+      <a data-nav="feedback" href="feedback.html">Feedback</a>
+      <a data-nav="research" href="research.html">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding: 34px 22px 60px;">
+  <h1 style="margin-bottom:.2em">Research &amp; model information</h1>
+  <p class="muted" style="max-width: 74ch;">
+    Architecture, languages, data provenance, evaluation methodology, and the limitations we want a reader
+    to know before trusting any output.
+  </p>
+
+  <div class="grid grid-2" style="align-items:start; margin-top:22px;">
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Model</h3><span class="muted small mono" id="model-version"></span></div>
+      <div id="model-arch"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Languages &amp; modalities</h3></div>
+      <div id="model-modalities"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Datasets</h3></div>
+      <div id="model-datasets"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Evaluation methodology</h3></div>
+      <ul class="muted small" style="padding-left:18px">
+        <li>Stratified train/validation/test split with the test set held out from model and threshold selection.</li>
+        <li>Threshold chosen on validation data under an explicit false-negative/false-positive cost model.</li>
+        <li>Three-way decision (hate / non-hate / needs review) with abstentions counted, not hidden.</li>
+        <li>Calibration reported as Brier score and expected calibration error.</li>
+        <li>Robustness measured on an author-constructed adversarial probe set, reported per category.</li>
+        <li>Explanation quality measured by comprehensiveness and sufficiency under masking.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Known limitations</h3></div>
+      <ul class="muted small" id="model-limitations" style="padding-left:18px"></ul>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Responsible use</h3></div>
+      <div id="model-responsible"></div>
+      <p class="small muted" style="margin-top:12px">
+        Attribution highlights model-derived features. It does not establish intent, causation, or the truth
+        of any claim about a person or group.
+      </p>
+    </section>
+  </div>
+
+  <div id="research-alert" style="margin-top:18px"></div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>HateXAI · research prototype for assisted moderation. © <span id="year"></span></p>
+  </div>
+</footer>
+
+<script src="js/app.js"></script>
+<script src="js/research.js"></script>
+</body>
+</html>

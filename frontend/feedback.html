@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feedback — HateXAI</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-page="feedback">
+<header class="site-header">
+  <div class="container inner">
+    <a class="brand" href="index.html">
+      <span class="logo" aria-hidden="true"></span>
+      <span>HateXAI <small>Explainable moderation research</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a data-nav="home" href="index.html">Overview</a>
+      <a data-nav="analyze" href="analyze.html">Analyze</a>
+      <a data-nav="dashboard" href="dashboard.html">Evaluation</a>
+      <a data-nav="feedback" href="feedback.html">Feedback</a>
+      <a data-nav="research" href="research.html">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding: 34px 22px 60px;">
+  <h1 style="margin-bottom:.2em">Report a prediction</h1>
+  <p class="muted" style="max-width: 74ch;">
+    Found a wrong or questionable result? Send it to the review queue. Reports are stored as
+    <strong>review candidates</strong> — they are never used as training labels automatically, and they are
+    kept out of the evaluation split by design.
+  </p>
+
+  <div class="grid grid-2" style="align-items:start; margin-top:22px;">
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">New report</h3></div>
+      <form id="feedback-form" novalidate>
+        <label for="fb-text">Post text</label>
+        <textarea id="fb-text" rows="5" maxlength="5000" required placeholder="The post you analysed…"></textarea>
+
+        <label for="fb-context" style="margin-top:14px">Context (optional)</label>
+        <input id="fb-context" type="text" maxlength="2000" />
+
+        <div class="field-row" style="margin-top:16px">
+          <label style="margin:0">Model said</label>
+          <span class="pill neutral" id="fb-prediction">no analysis attached</span>
+        </div>
+
+        <label style="margin-top:16px">Your assessment</label>
+        <div class="radio-row">
+          <label class="radio-chip"><input type="radio" name="user_label" value="hate" /> Hate</label>
+          <label class="radio-chip"><input type="radio" name="user_label" value="non_hate" /> Non-hate</label>
+          <label class="radio-chip"><input type="radio" name="user_label" value="unsure" checked /> Unsure</label>
+        </div>
+
+        <label for="fb-comment" style="margin-top:16px">Comment (optional)</label>
+        <textarea id="fb-comment" rows="3" maxlength="2000" placeholder="Why is this wrong? e.g. it is counterspeech, or a quotation."></textarea>
+
+        <div style="margin-top:20px">
+          <button class="btn btn-primary" type="submit" id="fb-submit">Submit report</button>
+        </div>
+      </form>
+      <div id="feedback-alert" style="margin-top:16px"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 style="margin:0">Review queue</h3>
+        <div class="spacer"></div>
+        <span class="muted small" id="queue-summary"></span>
+      </div>
+      <div id="queue"><div class="empty">Loading queue…</div></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>HateXAI · research prototype for assisted moderation. © <span id="year"></span></p>
+  </div>
+</footer>
+
+<script src="js/app.js"></script>
+<script src="js/feedback.js"></script>
+</body>
+</html>

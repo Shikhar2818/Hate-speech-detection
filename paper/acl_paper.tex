@@ -32,14 +32,14 @@
 \maketitle
 
 \begin{abstract}
-Hate speech on social media is multilingual, often code-mixed, increasingly multimodal, and highly context-dependent. High-resource text-only classifiers overfit lexical cues, fail on low-resource and mixed-script posts, and rarely justify decisions in a way moderators can audit. We present \textbf{HateXAI}, a framework that maps a post \(x_i=\{T_i,V_i,C_i\}\) to a binary decision \(y_i\in\{0,1\}\) while emitting a natural-language rationale. A multilingual encoder (XLM-RoBERTa) fuses text and conversational context with optional CLIP visual features through a gated multimodal module. Explanations are produced with LIME and attention attributions and are further aligned using Direct Preference Optimization (DPO) on chosen versus rejected rationales, so the language model prefers faithful, less stereotyped justifications. On a diagnostic multilingual split the linear baseline already separates hateful from non-hateful posts; the full stack adds group-wise fairness reports and explanation reward scores. We argue that reward-guided rationales plus multimodal, low-resource modeling are necessary for trustworthy moderation rather than accuracy alone.
+Hate speech on social media is multilingual, often code-mixed, increasingly multimodal, and highly context-dependent. High-resource text-only classifiers overfit lexical cues, fail on low-resource and mixed-script posts, and rarely justify decisions in a way moderators can audit. We present \textbf{HateXAI}, a framework that maps a post \(x_i=\{T_i,V_i,C_i\}\) to a binary decision \(y_i\in\{0,1\}\) while emitting a natural-language rationale. A multilingual encoder (XLM-RoBERTa) fuses text and conversational context with optional CLIP visual features through a gated multimodal module. Explanations are produced with LIME, occlusion, and attention attributions, with faithfulness reported as comprehensiveness and sufficiency rather than asserted. A DPO module that aligns generated rationales with chosen versus rejected explanations is implemented and unit-tested, but is \emph{not} trained or evaluated in this work; we therefore separate implemented components from measured ones throughout. What we do measure is a calibrated, CPU-runnable baseline with a cost-weighted three-way decision (hate / non-hate / needs review), an eight-configuration feature and calibration ablation, and an author-constructed adversarial probe set on which the baseline still fails on quoted hate, counterspeech, and neutral identity mentions. We argue that reward-guided rationales plus a human-review outcome are necessary for trustworthy moderation rather than accuracy alone, and we report our system's failures explicitly rather than only its successes.
 \end{abstract}
 
 \section{Introduction}
 
-The scale of online conversation has outpaced manual moderation. Automated hate-speech detectors are widely deployed, yet they remain brittle: they are trained mostly on English, they ignore images and thread context, and they behave as black boxes \cite{fortuna2018survey,davidson2017hate}. Errors are not symmetric. False negatives leave targeted groups unprotected; false positives silence minorities whose dialect or reclaimed language is misread as abuse \cite{sap2019racial}.
+The scale of online conversation has outpaced manual moderation. Automated hate-speech detectors are widely deployed, yet they remain brittle: they are trained mostly on English, they ignore images and thread context, and they behave as black boxes \cite{fortuna2018survey,davidson2017hate,vidgen2020directions}. Errors are not symmetric. False negatives leave targeted groups unprotected; false positives silence minorities whose dialect or reclaimed language is misread as abuse \cite{sap2019racial}.
 
-Low-resource and code-mixed settings make the problem harder. In Indian social media, Hindi--English mixing, romanized Indic text, and culturally specific insults are common, and HASOC-style shared tasks show large drops when systems trained on English are applied off-the-shelf \cite{mandl2019hasoc}. Memes add a second channel in which the text is innocuous but the image supplies the attack \cite{kiela2020hatefulmemes}.
+Low-resource and code-mixed settings make the problem harder. In Indian social media, Hindi--English mixing, romanized Indic text, and culturally specific insults are common, and HASOC-style shared tasks show large drops when systems trained on English are applied off-the-shelf \cite{mandl2019hasoc,macavaney2019hatespeech}. Memes add a second channel in which the text is innocuous but the image supplies the attack \cite{kiela2020hatefulmemes}.
 
 We address three gaps together:
 
@@ -50,18 +50,19 @@ We address three gaps together:
 \end{enumerate}
 
 \paragraph{Contributions.}
-(1) A gated multimodal architecture for multilingual and code-mixed hate speech with optional vision.
-(2) An explanation stack (LIME, attention, counterfactual cues) coupled to a scalar explanation reward.
-(3) A DPO training recipe that treats (chosen, rejected) rationales as preferences.
-(4) An open implementation, ACL paper template, and defense slides for reproducible student research.
+(1) A calibrated multilingual and code-mixed classifier with a cost-weighted three-way decision and explicit abstention, evaluated with reliability metrics (Brier, ECE) and a held-out ablation.
+(2) An explanation stack (LIME, occlusion, attention, counterfactual cues) whose faithfulness is \emph{measured} by comprehensiveness and sufficiency under a masking procedure shared with the attribution itself.
+(3) An inspection-driven audit that identifies and corrects concrete defects, including a self-referential reward score and a misaligned DPO sequence log-probability, with regression tests.
+(4) An author-constructed adversarial probe set targeting quoted hate, counterspeech, reclaimed slurs, sarcasm, and non-hateful profanity, with contested cases flagged.
+(5) A gated multimodal architecture and a DPO rationale-alignment recipe, both \emph{implemented but not evaluated here}; we report them as such and do not claim results for them.
 
 \section{Related Work}
 
 \paragraph{Hate speech detection.}
-Early systems used bag-of-words and character n-grams \cite{davidson2017hate}. Transformer models such as HateBERT improve in-domain English accuracy \cite{caselli2021hatebert} but transfer poorly to code-mixed Hindi--English. HateXplain adds human rationales, enabling explanation-aware training \cite{mathew2021hatexplain}.
+Early systems used bag-of-words and character n-grams \cite{davidson2017hate,zampieri2019olid}. Transformer models such as HateBERT improve in-domain English accuracy \cite{caselli2021hatebert} but transfer poorly to code-mixed Hindi--English. HateXplain adds human rationales, enabling explanation-aware training \cite{mathew2021hatexplain}. Implicit hate---abuse that avoids an explicit slur---remains difficult and is benchmarked separately \cite{elsherief2021latent}.
 
 \paragraph{Multilingual and multimodal abuse.}
-XLM-R provides strong cross-lingual initialization \cite{conneau2020xlmr}. HASOC and related FIRE tasks target Indo-European hate and offense \cite{mandl2019hasoc}. The Hateful Memes challenge showed that unimodal models miss image--text interactions \cite{kiela2020hatefulmemes}; CLIP supplies aligned visual features \cite{radford2021clip}.
+XLM-R provides strong cross-lingual initialization \cite{conneau2020xlmr}, and production systems now deploy character-level multilingual transformers \cite{lees2022perspective}. HASOC and related FIRE tasks target Indo-European hate and offense \cite{mandl2019hasoc}. The Hateful Memes challenge showed that unimodal models miss image--text interactions \cite{kiela2020hatefulmemes,gomez2020exploring}; CLIP supplies aligned visual features \cite{radford2021clip}.
 
 \paragraph{Explainability.}
 LIME \cite{ribeiro2016lime} and SHAP \cite{lundberg2017shap} approximate local decision surfaces. Faithfulness---whether highlighted tokens actually drove the prediction---is distinct from plausibility \cite{jacovi2020faithfulness}. We report comprehensiveness (probability drop after masking top evidence) alongside classification metrics.
@@ -112,7 +113,7 @@ Given a frozen reference policy \(\pi_{\mathrm{ref}}\) and a trainable policy \(
 where \(e^+\) is the chosen explanation and \(e^-\) the rejected one \cite{rafailov2023dpo}. In our implementation the policy is a seq2seq LLM (Flan-T5) prompted to emit \texttt{HATE}/\texttt{NON\_HATE} plus a short justification.
 
 \subsection{Fairness}
-We report macro-F1 and false-positive rate stratified by language and by code-mix status, following evidence that dialect and identity markers inflate false positives \cite{sap2019racial}.
+We report macro-F1 and false-positive rate stratified by language and by code-mix status, following evidence that dialect and identity markers inflate false positives \cite{sap2019racial,borkan2019nuanced}.
 
 \section{Experimental Setup}
 
@@ -128,30 +129,60 @@ The repository ships a synthetic diagnostic set covering English, Hindi, and Hin
 \end{itemize}
 
 \paragraph{Metrics.}
-Accuracy, macro-F1, precision, recall, AUROC; explanation comprehensiveness; mean reward \(r\); FPR by language.
+Accuracy, macro-F1, per-class precision/recall/F1, AUROC, confusion matrix, false-positive and false-negative rates; calibration as Brier score and expected calibration error \cite{guo2017calibration}; three-way decision behaviour, including the abstention rate, in the learning-to-defer sense \cite{madras2018predict}; robustness accuracy on the adversarial probe set by category; and explanation comprehensiveness and sufficiency. Threshold-dependent metrics are reported at the operating point selected on validation data under an explicit false-negative/false-positive cost model.
 
 \paragraph{Implementation.}
-PyTorch and Hugging Face Transformers. Default configs keep vision off so students can run on CPU; \texttt{configs/cpu.yaml} uses DistilBERT multilingual and Flan-T5-small.
+PyTorch and Hugging Face Transformers, with a FastAPI service and a dependency-free HTML/CSS/JavaScript dashboard. Default configs keep vision off so the pipeline runs on CPU; \texttt{configs/cpu.yaml} uses DistilBERT multilingual and Flan-T5-small.
+
+\paragraph{Reproducibility.}
+\texttt{experiments/run\_experiments.py} regenerates every reported number as strict JSON under \texttt{outputs/eval/} together with a run manifest recording seed, device, Python version, and data paths. The decision threshold is selected on the validation split only, and the test split is never used for model or threshold selection. Feedback submitted through the API is stored as a review candidate in a separate append-only log and never enters training or evaluation.
 
 \section{Results}
 
-Table~\ref{tab:placeholder} is the reporting template. Fill numbers after training on the licensed public corpora. On the bundled synthetic split, the linear baseline is expected to score high because lexical cues are deliberately separable; that split validates engineering, not scientific superiority.
+\paragraph{Established (reproducible) results.}
+Table~\ref{tab:ablation} reports the feature and calibration ablation. The legacy character-only baseline reaches 0.667 accuracy and 0.778 AUROC on the bundled test split; selecting by train-only cross-validation yields the union of word and character n-grams with Platt scaling, which raises held-out probe accuracy from 0.639 to 0.750 (unambiguous subset 0.710 to 0.806). Calibration leaves ranking unchanged while reducing Brier score from 0.202 to 0.087.
+
+These numbers are \emph{not} scientific claims. The test split contains six examples and cross-validation covers thirty, so individual differences are not statistically meaningful. The probe set (n=36) is author-constructed rather than a public benchmark.
 
 \begin{table}[t]
 \centering
 \small
-\begin{tabular}{lccc}
+\begin{tabular}{llcc}
 \toprule
-Model & Acc. & Macro-F1 & Expl.\ reward \\
+Feature set & Calibrated & Probe acc. & Brier \\
 \midrule
-Linear TF-IDF & -- & -- & -- \\
-XLM-R text+context & -- & -- & -- \\
-XLM-R + CLIP & -- & -- & -- \\
-+ DPO rationales & -- & -- & -- \\
+char (legacy) & no & 0.639 & 0.236 \\
+word & no & 0.750 & 0.213 \\
+word & yes & 0.806 & 0.079 \\
+union & no & 0.750 & 0.202 \\
+union & yes & 0.750 & 0.087 \\
 \bottomrule
 \end{tabular}
-\caption{Main results (fill after public-data runs). Report mean \(\pm\) std over three seeds.}
-\label{tab:placeholder}
+\caption{Feature and calibration ablation, selected by train-only cross-validation and reported on held-out probes. Reproduce with \texttt{experiments/run\_experiments.py}.}
+\label{tab:ablation}
+\end{table}
+
+\paragraph{Failure analysis.}
+On the probe set the baseline fails systematically on \emph{quoted} hate speech, \emph{counterspeech} that repeats a slur to condemn it, and \emph{neutral identity mentions}, all of which contain surface cues the classifier treats as evidence of hate. This is the use--mention distinction that automated systems routinely fail and that can be taught \cite{gligoric2024use}; it is the clearest argument for the human-review outcome we provide rather than a forced binary label.
+
+\paragraph{Planned results (intentionally empty).}
+The transformer, vision-fusion, and DPO systems are implemented but no checkpoint was trained in this environment, so Table~\ref{tab:planned} is left blank rather than filled with estimates. Meaningful comparison requires a licensed public corpus.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Model & Macro-F1 & Status \\
+\midrule
+Linear TF-IDF (calibrated) & see Table~\ref{tab:ablation} & evaluated \\
+XLM-R text+context & -- & not trained \\
+XLM-R + CLIP & -- & not trained \\
++ DPO rationales & -- & not trained \\
+\bottomrule
+\end{tabular}
+\caption{Planned main comparison. Blank by design: no checkpoint exists, so no number is reported.}
+\label{tab:planned}
 \end{table}
 
 \paragraph{Qualitative analysis.}
@@ -162,11 +193,11 @@ We expect residual failures on sarcasm, reclaimed slurs, and memes whose hate is
 
 \section{Ethics and Limitations}
 
-Hate-speech annotation is culturally situated. A model trained in one community may encode that community's prejudices \cite{sap2019racial}. We do not recommend fully automated penalties. Explanations can be \emph{plausible but unfaithful}; we therefore measure probability drop under masking rather than only human likert scores \cite{jacovi2020faithfulness}. Synthetic data in the repository is for software tests and must not be treated as a demographic sample. Images and user identifiers, if added later, require IRB/ethics clearance and dataset licenses. Dual-use risk: the same features that detect hate can be inverted to write it; we release classifiers and explainers, not generative attack tools.
+Hate-speech annotation is culturally situated. A model trained in one community may encode that community's prejudices \cite{sap2019racial}, and abusive-language datasets are themselves biased toward particular topics and dialects \cite{wiegand2019biased}. We do not recommend fully automated penalties. Explanations can be \emph{plausible but unfaithful}; we therefore measure probability drop under masking rather than only human likert scores \cite{jacovi2020faithfulness}. Synthetic data in the repository is for software tests and must not be treated as a demographic sample. Images and user identifiers, if added later, require IRB/ethics clearance and dataset licenses. Dual-use risk: the same features that detect hate can be inverted to write it; we release classifiers and explainers, not generative attack tools.
 
 \section{Conclusion}
 
-HateXAI couples a multimodal, multilingual detector with XAI and reward-optimized rationales. Framing posts as \(x_i=\{T_i,V_i,C_i\}\) makes context and memes first-class, while DPO aligns explanations with moderator preferences. The open codebase, ACL draft, and slides provide a complete student research stack. Next steps are human evaluation of rationales, harder code-mixed corpora, and calibrated thresholds per language so that false-positive rates stay comparable across groups.
+HateXAI couples a multilingual detector with measurable explanation quality and an explicit human-review outcome. Framing posts as \(x_i=\{T_i,V_i,C_i\}\) makes context first-class; the vision and DPO components are implemented but, as this paper states plainly, not yet trained or evaluated. The measured contribution here is a calibrated baseline with a cost-weighted three-way decision, an ablation, and an adversarial probe set that exposes the model's systematic failures on quoted hate and counterspeech. The open codebase, service, dashboard, and ACL draft provide a reproducible student research stack. Next steps are training the transformer and DPO systems on licensed corpora, human evaluation of rationales, and per-language thresholds so false-positive rates stay comparable across groups.
 
 \section*{Acknowledgements}
 We thank Dr.\ Pradeepika Verma for guidance. Office: N2-WS-062.

@@ -89,6 +89,7 @@ class MultimodalHateDetector(nn.Module):
         context_ids: torch.Tensor | None = None,
         context_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
+        class_weights: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         text_vec, attentions = self.encode_text(input_ids, attention_mask)
         if self.use_context and context_ids is not None:
@@ -100,5 +101,7 @@ class MultimodalHateDetector(nn.Module):
         logits = self.classifier(fused)
         result = {"logits": logits, "fused": fused, "attentions": attentions}
         if labels is not None:
-            result["loss"] = nn.functional.cross_entropy(logits, labels)
+            # class_weights lets the caller honour the class-imbalance handling
+            # the paper claims (PROJECT_AUDIT.md section 3.4).
+            result["loss"] = nn.functional.cross_entropy(logits, labels, weight=class_weights)
         return result

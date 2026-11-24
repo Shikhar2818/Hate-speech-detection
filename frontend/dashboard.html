@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Evaluation — HateXAI</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-page="dashboard">
+<header class="site-header">
+  <div class="container inner">
+    <a class="brand" href="index.html">
+      <span class="logo" aria-hidden="true"></span>
+      <span>HateXAI <small>Explainable moderation research</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a data-nav="home" href="index.html">Overview</a>
+      <a data-nav="analyze" href="analyze.html">Analyze</a>
+      <a data-nav="dashboard" href="dashboard.html">Evaluation</a>
+      <a data-nav="feedback" href="feedback.html">Feedback</a>
+      <a data-nav="research" href="research.html">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding: 34px 22px 60px;">
+  <h1 style="margin-bottom:.2em">Model evaluation</h1>
+  <p class="muted" style="max-width: 74ch;">
+    Every number below is loaded from the experiment artifacts in <span class="mono">outputs/eval/</span>.
+    Systems that have not been trained show an explicit unavailable state — nothing is simulated.
+  </p>
+
+  <div id="dashboard-alert" style="margin-top:18px"></div>
+
+  <div id="manifest" class="card reveal" style="margin-top:18px">
+    <div class="skeleton" style="width:35%"></div>
+    <div class="skeleton" style="width:60%"></div>
+  </div>
+
+  <section class="card reveal" id="headline-card">
+    <div class="card-head"><h2 style="margin:0">Primary metrics</h2><span class="muted small" id="headline-scope"></span></div>
+    <div class="grid grid-4" id="headline-metrics"></div>
+    <div class="grid grid-2" style="margin-top:18px">
+      <div>
+        <h3>Per-class F1</h3>
+        <div class="bars" id="per-class"></div>
+      </div>
+      <div>
+        <h3>Error rates</h3>
+        <div class="bars" id="error-rates"></div>
+      </div>
+    </div>
+    <div style="margin-top:18px">
+      <h3>Confusion matrix</h3>
+      <div class="cm-grid" id="confusion"></div>
+    </div>
+  </section>
+
+  <section class="card reveal">
+    <div class="card-head"><h2 style="margin:0">Decision policy</h2></div>
+    <p class="muted small" id="threshold-note"></p>
+    <div class="grid grid-4" id="threshold-metrics"></div>
+    <div class="grid grid-2" style="margin-top:18px">
+      <div>
+        <h3>Three-way test outcome</h3>
+        <div class="bars" id="three-way"></div>
+      </div>
+      <div>
+        <h3>Operating point</h3>
+        <div id="operating"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card reveal">
+    <div class="card-head"><h2 style="margin:0">System comparison</h2></div>
+    <table>
+      <thead>
+        <tr><th>System</th><th>Status</th><th class="num">Accuracy</th><th class="num">Macro-F1</th><th class="num">AUROC</th><th class="num">ECE</th><th>Notes</th></tr>
+      </thead>
+      <tbody id="comparison-body"></tbody>
+    </table>
+    <p class="muted small" id="comparison-caveat" style="margin-top:12px"></p>
+  </section>
+
+  <section class="card reveal">
+    <div class="card-head"><h2 style="margin:0">Ablation: features and calibration</h2></div>
+    <p class="muted small" id="ablation-note"></p>
+    <table>
+      <thead>
+        <tr><th>Feature set</th><th>Calibrated</th><th class="num">CV macro-F1</th><th class="num">Test acc.</th><th class="num">Brier</th><th class="num">ECE</th><th class="num">Probe acc.</th><th class="num">Probe (unambig.)</th></tr>
+      </thead>
+      <tbody id="ablation-body"></tbody>
+    </table>
+  </section>
+
+  <section class="card reveal">
+    <div class="card-head"><h2 style="margin:0">Robustness: adversarial diagnostic probes</h2></div>
+    <p class="muted small" id="probe-note"></p>
+    <div class="grid grid-2">
+      <div><h3>Accuracy by category</h3><div class="bars" id="probe-categories"></div></div>
+      <div><h3>Subset scores</h3><div class="bars" id="probe-subsets"></div></div>
+    </div>
+    <h3 style="margin-top:20px">Misclassified probes</h3>
+    <div id="probe-failures"></div>
+  </section>
+
+  <section class="card reveal">
+    <div class="card-head"><h2 style="margin:0">Explanation faithfulness</h2></div>
+    <div class="grid grid-2" id="faithfulness"></div>
+    <p class="muted small" id="faith-note" style="margin-top:12px"></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>HateXAI · research prototype for assisted moderation. © <span id="year"></span></p>
+  </div>
+</footer>
+
+<script src="js/app.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

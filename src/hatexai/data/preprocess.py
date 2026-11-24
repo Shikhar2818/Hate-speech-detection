@@ -19,6 +19,12 @@ MENTION_PATTERN = re.compile(r"@\w+")
 HASHTAG_PATTERN = re.compile(r"#(\w+)")
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
+# Marker used to keep the optional context channel separable from the post text.
+CONTEXT_MARKER = "[CTX]"
+# Markers used only when a config explicitly opts into metadata-as-tokens.
+LANGUAGE_MARKER = "[LANG]"
+CODEMIX_MARKER = "[CM]"
+
 
 def normalize_text(text: str) -> str:
     text = text.strip()
@@ -45,6 +51,34 @@ def is_code_mixed(text: str) -> bool:
     has_latin = bool(re.search(r"[A-Za-z]", text))
     has_indic = bool(CODEMIX_PATTERN.search(text))
     return has_latin and has_indic
+
+
+def fuse_text(
+    text: str,
+    context: str = "",
+    language: str | None = None,
+    code_mixed: bool | None = None,
+    include_metadata: bool = False,
+) -> str:
+    """Build the single canonical model input string.
+
+    Both the linear baseline and the transformer classifier MUST call this so
+    they consume an identical feature space (see PROJECT_AUDIT.md section 3.6).
+
+    ``include_metadata`` is off by default: injecting ``Language:``/``CodeMixed:``
+    tokens hands the classifier an explicit shortcut that the baseline does not
+    get, which confounds baseline-vs-model comparisons.
+    """
+    normalized = normalize_text(text)
+    parts = [normalized]
+    if context:
+        parts.append(f"{CONTEXT_MARKER} {normalize_text(context)}")
+    if include_metadata:
+        if language:
+            parts.append(f"{LANGUAGE_MARKER} {language}")
+        if code_mixed is not None:
+            parts.append(f"{CODEMIX_MARKER} {int(bool(code_mixed))}")
+    return " ".join(parts).strip()
 
 
 @dataclass

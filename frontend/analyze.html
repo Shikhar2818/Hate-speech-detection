@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Analyze — HateXAI</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-page="analyze">
+<header class="site-header">
+  <div class="container inner">
+    <a class="brand" href="index.html">
+      <span class="logo" aria-hidden="true"></span>
+      <span>HateXAI <small>Explainable moderation research</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a data-nav="home" href="index.html">Overview</a>
+      <a data-nav="analyze" href="analyze.html">Analyze</a>
+      <a data-nav="dashboard" href="dashboard.html">Evaluation</a>
+      <a data-nav="feedback" href="feedback.html">Feedback</a>
+      <a data-nav="research" href="research.html">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding: 34px 22px 60px;">
+  <h1 style="margin-bottom:.2em">Detection workspace</h1>
+  <p class="muted" style="max-width: 70ch;">
+    Enter a post and optional context. The model returns a decision, a calibrated probability, an
+    uncertainty signal, and the tokens that most influenced it.
+  </p>
+
+  <div class="grid grid-2" style="align-items:start; margin-top: 22px;">
+    <section class="card">
+      <div class="card-head"><h3 style="margin:0">Input</h3><span class="badge" style="margin:0; font-size:.68rem">T + C</span></div>
+      <form id="analyze-form" novalidate>
+        <label for="post-text">Post text</label>
+        <div class="field-row">
+          <span class="muted small">Required</span>
+          <span class="counter" id="char-counter">0 / 5000</span>
+        </div>
+        <textarea id="post-text" rows="6" maxlength="5000" required placeholder="Paste a social media post…"></textarea>
+
+        <label for="post-context" style="margin-top:16px">Context (optional)</label>
+        <input id="post-context" type="text" maxlength="2000" placeholder="Reply thread, page, or event" />
+
+        <label for="method" style="margin-top:16px">Explanation method</label>
+        <select id="method">
+          <option value="lime">LIME (local surrogate)</option>
+          <option value="occlusion">Delete-one occlusion</option>
+        </select>
+
+        <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-primary" type="submit" id="analyze-btn">Analyze</button>
+          <button class="btn btn-ghost" type="reset" id="reset-btn">Clear</button>
+        </div>
+      </form>
+
+      <div style="margin-top:22px">
+        <p class="muted small" style="margin-bottom:8px">Diagnostic examples (adversarial probes):</p>
+        <div class="chips" id="examples"></div>
+      </div>
+
+      <div id="form-alert" style="margin-top:16px"></div>
+    </section>
+
+    <section class="card" id="results" aria-live="polite">
+      <div class="card-head">
+        <h3 style="margin:0">Result</h3>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm hidden" id="report-btn" type="button">Report this prediction</button>
+      </div>
+
+      <div id="results-body">
+        <div class="empty">No analysis yet. Submit a post to see the decision and explanation.</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="card hidden" id="vision-card" style="margin-top:18px;">
+    <div class="card-head"><h3 style="margin:0">Image modality</h3><span class="badge warn" style="margin:0">Unavailable</span></div>
+    <p class="muted small">
+      No vision model is trained or evaluated in this build, so image and meme content is deliberately
+      not analysed. The backend still validates uploads (type, 5&nbsp;MB cap, decodability) and then discards
+      them, so nothing is silently pretended.
+    </p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>HateXAI · research prototype for assisted moderation. © <span id="year"></span></p>
+  </div>
+</footer>
+
+<script src="js/app.js"></script>
+<script src="js/analyze.js"></script>
+</body>
+</html>

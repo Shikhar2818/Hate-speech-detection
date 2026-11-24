@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HateXAI — Milestone 1 | Hate Speech Detection through Explainable AI and Reward-Optimized LLMs</title>
+<style>
+  :root{
+    --bg:#0b1220;
+    --bg2:#0f1a2e;
+    --panel:#131f36;
+    --panel2:#17253f;
+    --line:#243a5e;
+    --text:#e8eefb;
+    --muted:#9fb0cc;
+    --accent:#5ea9ff;
+    --accent2:#a78bfa;
+    --cyan:#4fd1e0;
+    --good:#4ade80;
+    --warn:#fbbf24;
+    --bad:#f87171;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI",Inter,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;}
+  body{overflow:hidden}
+
+  /* ---------- fixed 16:9 stage, scaled to the viewport ---------- */
+  #stage{
+    width:1280px;height:720px;position:absolute;top:0;left:0;
+    transform-origin:top left;overflow:hidden;
+  }
+  .slide{
+    position:absolute;inset:0;padding:44px 56px 62px;
+    display:none;flex-direction:column;gap:14px;
+    background:
+      radial-gradient(1100px 520px at 78% -8%, rgba(94,169,255,.16), transparent 60%),
+      radial-gradient(900px 520px at 8% 108%, rgba(167,139,250,.15), transparent 60%),
+      linear-gradient(160deg,var(--bg) 0%,var(--bg2) 100%);
+  }
+  .slide.active{display:flex;animation:in .34s ease-out both}
+  @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){
+    .slide.active{animation:none}
+    .bar span{transition:none}
+  }
+
+  /* ---------- shared chrome ---------- */
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+  h1{font-size:32px;line-height:1.15;margin:0;letter-spacing:-.4px}
+  h1 .thin{font-weight:400;color:var(--muted)}
+  .kicker{font-size:12.5px;letter-spacing:2.4px;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .rule{height:2px;width:56px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;margin:8px 0 0}
+  .req{
+    font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;
+    padding:5px 11px;white-space:nowrap;background:rgba(19,31,54,.6)
+  }
+  .req b{color:var(--cyan);font-weight:600}
+  .lead{font-size:16.5px;line-height:1.5;color:#d5e0f4;margin:0;max-width:1120px}
+  .muted{color:var(--muted)}
+  .mono{font-family:var(--mono)}
+  .cols{display:grid;gap:16px}
+  .c2{grid-template-columns:1fr 1fr}
+  .c3{grid-template-columns:repeat(3,1fr)}
+  .c212{grid-template-columns:1.05fr 1fr}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:14px;padding:15px 17px;
+  }
+  .card h3{margin:0 0 8px;font-size:15.5px;letter-spacing:.2px;color:#fff}
+  .card h3 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:var(--accent);margin-right:8px;vertical-align:middle}
+  .card ul{margin:0;padding-left:19px}
+  .card li{font-size:14px;line-height:1.5;color:#cfdcf2;margin:5px 0}
+  .card p{font-size:14px;line-height:1.5;color:#cfdcf2;margin:0}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:6px}
+  .t-ok{background:rgba(74,222,128,.14);color:var(--good);border:1px solid rgba(74,222,128,.35)}
+  .t-wip{background:rgba(251,191,36,.14);color:var(--warn);border:1px solid rgba(251,191,36,.35)}
+  .t-opt{background:rgba(159,176,204,.14);color:var(--muted);border:1px solid rgba(159,176,204,.3)}
+  table{border-collapse:collapse;width:100%;font-size:13.3px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.42}
+  th{color:var(--cyan);font-size:12px;letter-spacing:.9px;text-transform:uppercase;font-weight:700;
+     background:rgba(94,169,255,.07)}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+  .hint{font-size:12px;color:var(--muted);line-height:1.45}
+  /* dense slides: shrink type so the slide always fits a 16:9 stage */
+  .compact .card{padding:12px 14px}
+  .compact .card h3{font-size:14.5px;margin-bottom:6px}
+  .compact .card li{font-size:12.9px;line-height:1.42;margin:3px 0}
+  .compact .card p{font-size:12.9px;line-height:1.42}
+  .compact table{font-size:12.2px}
+  .compact th,.compact td{padding:6px 9px}
+  .compact .hint{font-size:11.5px}
+  .compact .lead{font-size:15px}
+  .compact .note{font-size:12.4px;padding:7px 11px}
+  .note{border-left:3px solid var(--accent2);padding:8px 12px;background:rgba(167,139,250,.08);
+        border-radius:0 10px 10px 0;font-size:13px;line-height:1.5;color:#d7ddf0}
+  .eq{font-family:var(--mono);font-size:14px;color:#ffe6a8;background:rgba(251,191,36,.07);
+      border:1px solid rgba(251,191,36,.22);border-radius:10px;padding:9px 13px;display:inline-block;line-height:1.5}
+
+  /* ---------- title slide ---------- */
+  #s1{padding:52px 64px 62px}
+  #s1 .pill{display:inline-block;font-size:12px;letter-spacing:2.2px;text-transform:uppercase;
+    color:var(--cyan);border:1px solid rgba(79,209,224,.4);background:rgba(79,209,224,.08);
+    padding:7px 14px;border-radius:999px;font-weight:700}
+  #s1 h1{font-size:50px;line-height:1.1;margin:18px 0 0;max-width:1010px;letter-spacing:-.8px}
+  #s1 .grad{background:linear-gradient(92deg,var(--accent),var(--accent2) 70%);-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  #s1 .objective{font-size:18.5px;line-height:1.5;color:#dbe5f7;max-width:940px;margin:18px 0 0}
+  .meta{display:flex;gap:26px;flex-wrap:wrap;margin-top:26px;font-size:14px;color:var(--muted)}
+  .meta b{display:block;color:#fff;font-size:15px;font-weight:600;margin-top:3px}
+  .net{position:absolute;right:-40px;top:40px;width:520px;height:520px;opacity:.5;pointer-events:none}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:auto}
+
+  /* ---------- nav / progress ---------- */
+  #bar{position:absolute;left:0;bottom:0;height:4px;width:100%;background:rgba(255,255,255,.06)}
+  #bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));
+    transition:width .3s ease}
+  #nav{position:absolute;right:20px;bottom:14px;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted)}
+  #nav button{
+    background:rgba(19,31,54,.9);color:var(--text);border:1px solid var(--line);border-radius:9px;
+    padding:6px 11px;font-size:13px;cursor:pointer;font-family:inherit
+  }
+  #nav button:hover{border-color:var(--accent);color:#fff}
+  #nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  #dots{position:absolute;left:20px;bottom:14px;display:flex;gap:7px}
+  #dots i{width:9px;height:9px;border-radius:50%;background:#2b3f63;cursor:pointer;display:block}
+  #dots i.on{background:var(--accent);box-shadow:0 0 10px rgba(94,169,255,.7)}
+  .foot{position:absolute;left:20px;bottom:14px;padding-left:0;font-size:12px;color:var(--muted)}
+  svg .box{fill:rgba(19,31,54,.92);stroke:var(--line);stroke-width:1.4}
+  svg .boxb{fill:rgba(94,169,255,.12);stroke:var(--accent);stroke-width:1.5}
+  svg .boxv{fill:rgba(167,139,250,.12);stroke:var(--accent2);stroke-width:1.5}
+  svg .boxd{fill:rgba(251,191,36,.09);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:6 5}
+  svg .lbl{fill:#e8eefb;font-size:13px;font-weight:600}
+  svg .sub{fill:#9fb0cc;font-size:11px}
+  svg .arw{stroke:#5ea9ff;stroke-width:1.7;fill:none;marker-end:url(#ah)}
+  svg .arwd{stroke:#fbbf24;stroke-width:1.5;fill:none;stroke-dasharray:5 5;marker-end:url(#ahd)}
+  @media print{
+    body{overflow:visible}
+    #stage{position:static;transform:none!important;width:auto;height:auto}
+    .slide{position:relative;display:flex!important;page-break-after:always;height:720px}
+    #nav,#dots,#bar{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- ================= 1. TITLE & RESEARCH OVERVIEW ================= -->
+  <section class="slide active" id="s1" aria-label="Title and research overview">
+    <svg class="net" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <radialGradient id="g1"><stop offset="0" stop-color="#5ea9ff" stop-opacity=".85"/><stop offset="1" stop-color="#5ea9ff" stop-opacity="0"/></radialGradient>
+        <radialGradient id="g2"><stop offset="0" stop-color="#a78bfa" stop-opacity=".8"/><stop offset="1" stop-color="#a78bfa" stop-opacity="0"/></radialGradient>
+      </defs>
+      <circle cx="120" cy="120" r="90" fill="url(#g1)"/>
+      <circle cx="270" cy="250" r="110" fill="url(#g2)"/>
+      <g stroke="#5ea9ff" stroke-opacity=".45" stroke-width="1">
+        <path d="M40 300 L150 190 L210 250 L300 120" fill="none"/>
+        <path d="M150 190 L120 90 M210 250 L320 300 M300 120 L210 40" fill="none"/>
+        <path d="M40 300 L120 340 M120 90 L60 60 M320 300 L350 210 M210 40 L300 20" fill="none"/>
+      </g>
+      <g fill="#4fd1e0" fill-opacity=".85">
+        <circle cx="40" cy="300" r="3.6"/><circle cx="150" cy="190" r="4.4"/><circle cx="210" cy="250" r="3.2"/>
+        <circle cx="300" cy="120" r="3.8"/><circle cx="120" cy="90" r="3"/><circle cx="320" cy="300" r="2.8"/>
+        <circle cx="210" cy="40" r="3.2"/><circle cx="60" cy="60" r="2.6"/><circle cx="350" cy="210" r="2.6"/>
+        <circle cx="120" cy="340" r="3"/><circle cx="300" cy="20" r="2.6"/>
+      </g>
+    </svg>
+
+    <span class="pill">Bennett University &middot; Milestone&nbsp;1 review</span>
+    <h1>Hate Speech Detection through <span class="grad">Explainable&nbsp;AI</span> and Reward&#8209;Optimized LLMs</h1>
+    <p class="objective"><strong>HateXAI</strong> &mdash; a multilingual, explainable detection prototype that classifies a post
+      <span class="mono">x&nbsp;=&nbsp;{T,&nbsp;V,&nbsp;C}</span> as <em>hate</em> / <em>non&#8209;hate</em>, justifies each decision with
+      measurable token evidence, and escalates genuinely ambiguous cases to human review instead of forcing a binary label.</p>
+
+    <div class="meta">
+      <div>Project<b>HateXAI</b></div>
+      <div>Project instructor<b>Dr.&nbsp;Pradeepika Verma &middot; N2-WS-062</b></div>
+      <div>Presentation date<b>14 October 2026</b></div>
+      <div>Format<b>Milestone&nbsp;1 &middot; 9 slides</b></div>
+    </div>
+
+    <div class="chips">
+      <span class="req"><b>1</b> Problem domain</span>
+      <span class="req"><b>2</b> Existing systems &amp; feasibility</span>
+      <span class="req"><b>3</b> Objectives &amp; methodology</span>
+      <span class="req"><b>4</b> Algorithm relevance</span>
+      <span class="req"><b>&check;</b> Everything below is stated at its true implementation status</span>
+    </div>
+  </section>
+
+  <!-- ================= 2. PROBLEM DOMAIN & MOTIVATION ================= -->
+  <section class="slide" id="s2" aria-label="Problem domain and motivation">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 1 &middot; Problem domain</div>
+        <h1>Why hate&#8209;speech detection is still an open NLP problem</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>1</b> Problem domain identification &amp; analysis</span>
+    </div>
+
+    <p class="lead">Moderation demand outranks human capacity, so platforms deploy automated detectors. Detection is an
+      <em>identity&#8209;directed abuse</em> task, not a profanity task &mdash; and its two error types are not symmetric: a false
+      negative leaves a targeted group exposed, a false positive silences the dialect or reclaimed language of the very
+      communities a moderator should protect <span class="mono">[Sap&nbsp;2019; Vidgen&nbsp;2020]</span>.</p>
+
+    <div class="cols c3">
+      <div class="card">
+        <h3><span class="dot"></span>Language is context&#8209;dependent</h3>
+        <ul>
+          <li>Sarcasm, irony and dog&#8209;whistles invert surface meaning.</li>
+          <li>Quoting abuse in order to condemn it looks lexical&#8209;identical to abuse.</li>
+          <li>Reclaimed slurs inside a community differ from their out&#8209;group use <span class="mono">[ElSherief&nbsp;2021]</span>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot"></span>Multilingual &amp; code&#8209;mixed text</h3>
+        <ul>
+          <li>Hinglish and romanized Indic text break word&#8209;level English lexicons.</li>
+          <li>Shared tasks show large drops when English models are applied off&#8209;the&#8209;shelf <span class="mono">[Mandl&nbsp;2019]</span>.</li>
+          <li>Script mixing also defeats naive tokenizers.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot"></span>Black&#8209;box decisions</h3>
+        <ul>
+          <li>Moderators cannot audit or appeal a score with no evidence.</li>
+          <li>Attribution can look plausible yet be unfaithful <span class="mono">[Jacovi&nbsp;2020]</span>.</li>
+          <li>Metrics alone hide systematic failure on hard cases.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cols c212" style="margin-top:2px">
+      <div class="card" style="border-color:rgba(248,113,113,.4)">
+        <h3>Two real examples from the project's own probe set</h3>
+        <p><span class="tag t-ok">gold: non&#8209;hate</span> &ldquo;The poster said &ldquo;immigrants are vermin&rdquo; and the audience applauded.
+          <em>I am quoting it here because it should be condemned.</em>&rdquo;<br>
+          <span class="muted">Measured system output: P(hate)&nbsp;=&nbsp;0.58 &rarr; <span style="color:var(--bad)">wrong</span>. Quoted abuse is treated as abuse.</span></p>
+        <p style="margin-top:9px"><span class="tag t-warn">gold: non&#8209;hate</span> &ldquo;Anyone claiming that community are vermin is repeating a lie.
+          Please stop sharing that meme.&rdquo;<br>
+          <span class="muted">Measured: P(hate)&nbsp;=&nbsp;0.64 &rarr; <span style="color:var(--bad)">wrong</span>. Counterspeech that repeats the slur is misread.</span></p>
+      </div>
+      <div class="card">
+        <h3>What the example shows</h3>
+        <p>Both posts contain the same high&#8209;risk word as genuine hate. A bag&#8209;of&#8209;words or n&#8209;gram model has no representation
+          of <em>who is speaking</em>, <em>about whom</em>, or <em>with what intent</em>, so the trigger fires either way. Word matching is a
+          useful signal, not a decision procedure.</p>
+        <div class="note" style="margin-top:10px">This is the <strong>use&nbsp;vs.&nbsp;mention</strong> distinction: systems that cannot tell
+          them apart censor counterspeech <span class="mono">[Gligori&#263;&nbsp;2024]</span>. It is also why the project ships an explicit
+          <strong>needs&#8209;review</strong> outcome instead of a forced binary verdict.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 3. EXISTING SYSTEMS & GAP ================= -->
+  <section class="slide compact" id="s3" aria-label="Existing systems and research gap">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 2 &middot; Review of existing systems</div>
+        <h1>What already works, and where the gap actually is</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>2</b> Review of existing systems &amp; feasibility</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th style="width:22%">Approach</th><th style="width:30%">Established strength</th><th>Documented limitation for this project</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Lexicons &amp; classical ML</strong><br><span class="muted mono">n&#8209;grams, TF&#8209;IDF + linear models</span></td>
+          <td>Fast, CPU&#8209;cheap, reproducible; strong in&#8209;domain English <span class="mono">[Davidson&nbsp;2017]</span></td>
+          <td>Surface cues only &mdash; no context, sarcasm or code&#8209;mix; identity mentions inflate false positives</td>
+        </tr>
+        <tr>
+          <td><strong>Transformer classifiers</strong><br><span class="muted mono">HateBERT, XLM&#8209;R</span></td>
+          <td>Contextual representations; strong cross&#8209;lingual transfer <span class="mono">[Caselli&nbsp;2021; Conneau&nbsp;2020; Lees&nbsp;2022]</span></td>
+          <td>Needs licensed corpora, GPU time and per&#8209;language tuning; opaque to moderators; still fails on implicit hate</td>
+        </tr>
+        <tr>
+          <td><strong>Rationale&#8209;supervised data</strong><br><span class="muted mono">HateXplain</span></td>
+          <td>Human token rationales enable explanation&#8209;aware training <span class="mono">[Mathew&nbsp;2021]</span></td>
+          <td>English&#8209;centric; free&#8209;text rationales can be plausible without being faithful</td>
+        </tr>
+        <tr>
+          <td><strong>Explainable AI</strong><br><span class="muted mono">LIME, SHAP, attention</span></td>
+          <td>Local, model&#8209;agnostic attribution moderators can read <span class="mono">[Ribeiro&nbsp;2016; Lundberg&nbsp;2017]</span></td>
+          <td>Often shown as illustrations; faithfulness is rarely <em>measured</em> <span class="mono">[Jacovi&nbsp;2020]</span></td>
+        </tr>
+        <tr>
+          <td><strong>Preference&#8209;optimized LLMs</strong><br><span class="muted mono">RLHF / DPO</span></td>
+          <td>Aligns generation with preference without an explicit RL loop <span class="mono">[Ouyang&nbsp;2022; Rafailov&nbsp;2023]</span></td>
+          <td>Mostly applied to <em>labels or dialogue</em>, not to <em>justification quality</em>; costly to train and evaluate</td>
+        </tr>
+        <tr>
+          <td><strong>Multimodal detection</strong><br><span class="muted mono">Hateful Memes, MMHS150K</span></td>
+          <td>Captures hate carried by the image, not the caption <span class="mono">[Kiela&nbsp;2020; Gomez&nbsp;2020]</span></td>
+          <td>Requires image&#8209;labelled corpora; none is present here, so nothing can be claimed yet</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="cols c212" style="margin-top:4px">
+      <div class="card" style="border-color:rgba(94,169,255,.45)">
+        <h3>The specific gap this project addresses</h3>
+        <ul>
+          <li><strong>Explanations are asserted, not audited.</strong> We require a measured faithfulness number beside every attribution.</li>
+          <li><strong>Reward optimization targets labels, rarely justifications.</strong> We treat (chosen, rejected) <em>rationales</em> as the preference signal &mdash; as an experiment that must be trained and evaluated before it is claimed.</li>
+          <li><strong>Hard negatives are under&#8209;reported.</strong> Quoted hate, counterspeech and neutral identity mentions are where lexical models fail, and what we measure.</li>
+          <li><strong>Binary outputs over&#8209;claim.</strong> An uncertain post should reach a human, not a coin flip.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>How the gap is framed honestly</h3>
+        <p>Every technique at left <em>already exists</em> and performs its own task well. We do <strong>not</strong> claim prior systems
+          cannot detect hate speech. The contribution is the <strong>combination and the audit</strong>: one shared, reproducible pipeline
+          coupling calibrated probabilities, cost&#8209;weighted abstention, <em>measured</em> faithfulness and a preference&#8209;alignment
+          experiment &mdash; reporting its own failures as prominently as its successes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 4. PROBLEM STATEMENT & OBJECTIVES ================= -->
+  <section class="slide" id="s4" aria-label="Problem statement and objectives">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 3 &middot; Objectives</div>
+        <h1>Problem statement and project objectives</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>3</b> Objectives &amp; methodology</span>
+    </div>
+
+    <div class="cols c212">
+      <div class="card">
+        <h3>Research formulation</h3>
+        <div class="eq">x = { T , V , C } &nbsp;&rarr;&nbsp; f<sub>&theta;</sub>(x) = y &isin; {0,&nbsp;1}</div>
+        <ul style="margin-top:11px">
+          <li><span class="mono">T</span> &mdash; text, possibly multilingual or code&#8209;mixed (e.g. Hinglish).</li>
+          <li><span class="mono">V</span> &mdash; optional image / meme content (not yet trained or evaluated).</li>
+          <li><span class="mono">C</span> &mdash; context from available metadata or thread information only; nothing is invented.</li>
+          <li><span class="mono">y = 1</span> denotes <em>identity&#8209;directed abuse or dehumanization</em>, not mere offence or profanity.</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(251,191,36,.42)">
+        <h3>Two formulations, stated separately</h3>
+        <p><strong>Binary (research):</strong> the classifier is trained and scored as <span class="mono">y &isin; {0,1}</span>, so metrics stay
+          comparable with published work.</p>
+        <p style="margin-top:8px"><strong>Three&#8209;way (application):</strong> the deployed decision adds an abstention region and emits
+          <span class="mono">{hate,&nbsp;non&#8209;hate,&nbsp;needs_review}</span> under an explicit cost model, with abstentions counted rather than hidden.</p>
+        <div class="note" style="margin-top:10px">Keeping both is deliberate: a two&#8209;class objective is what prior work reports, while a
+          real moderation queue needs a route to human review.</div>
+      </div>
+    </div>
+
+    <div class="cols c3" style="margin-top:2px">
+      <div class="card">
+        <h3>Objectives &mdash; detection &amp; reproducibility</h3>
+        <ul>
+          <li>Build a reproducible hate&#8209;speech baseline that runs on CPU and regenerates every reported number from one command.</li>
+          <li>Compare against a meaningful pre&#8209;improvement baseline, selected by train&#8209;only cross&#8209;validation.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Objectives &mdash; language, explanation, alignment</h3>
+        <ul>
+          <li>Investigate multilingual and code&#8209;mixed classification (English, Hindi, Hinglish).</li>
+          <li>Provide interpretable, evidence&#8209;based predictions with measured faithfulness.</li>
+          <li>Investigate reward&#8209;guided rationale optimization via preference data.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Objectives &mdash; evaluation &amp; extension</h3>
+        <ul>
+          <li>Evaluate accuracy, error types, calibration and subgroup behaviour, not accuracy alone.</li>
+          <li>Explore multimodal (image / meme) capability only where data and a trained model exist.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 5. METHODOLOGY & ARCHITECTURE ================= -->
+  <section class="slide" id="s5" aria-label="Proposed methodology and architecture">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 3 &middot; Methodology</div>
+        <h1>System architecture: what runs today, and what is a separate experiment</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>3</b> Methodology &amp; architecture</span>
+    </div>
+
+    <svg viewBox="0 0 980 470" width="100%" height="396" role="img"
+         aria-label="HateXAI pipeline: input to canonical fusion, then the served calibrated baseline lane with cost-weighted three-way decision and explainability, alongside the untrained experimental transformer and DPO lane.">
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0 0 L7 3 L0 6 z" fill="#5ea9ff"/></marker>
+        <marker id="ahd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0 0 L7 3 L0 6 z" fill="#fbbf24"/></marker>
+      </defs>
+
+      <!-- column 1 : served lane -->
+      <text x="10" y="14" class="sub" style="font-weight:700;letter-spacing:1px;fill:#4ade80">SERVED PIPELINE — TRAINED, TESTED, REPRODUCIBLE</text>
+      <rect class="boxb" x="10" y="26" width="300" height="62" rx="10"/>
+      <text x="26" y="50" class="lbl">Input:  x = {T, V, C}</text>
+      <text x="26" y="70" class="sub">text · optional image (rejected if absent) · context</text>
+
+      <rect class="box" x="10" y="106" width="300" height="62" rx="10"/>
+      <text x="26" y="130" class="lbl">Preprocess + canonical fusion</text>
+      <text x="26" y="150" class="sub">one shared string for every system (fuse_text)</text>
+
+      <rect class="box" x="10" y="186" width="300" height="62" rx="10"/>
+      <text x="26" y="210" class="lbl">TF-IDF word + char n-grams &rarr; logistic regression</text>
+      <text x="26" y="230" class="sub">class_weight = balanced; selected by train-only CV</text>
+
+      <rect class="box" x="10" y="266" width="300" height="62" rx="10"/>
+      <text x="26" y="290" class="lbl">Platt calibration</text>
+      <text x="26" y="310" class="sub">ranking unchanged; Brier and ECE improve</text>
+
+      <rect class="boxb" x="10" y="346" width="300" height="62" rx="10"/>
+      <text x="26" y="370" class="lbl">Cost-weighted threshold + abstention band</text>
+      <text x="26" y="390" class="sub">fn : fp = 5 : 1 → threshold 0.394, band ±0.10 (val only)</text>
+
+      <rect class="boxb" x="10" y="426" width="300" height="40" rx="10"/>
+      <text x="26" y="451" class="lbl" style="font-size:14px">hate &nbsp;|&nbsp; non-hate &nbsp;|&nbsp; needs_review</text>
+
+      <path class="arw" d="M160 88 L160 104"/>
+      <path class="arw" d="M160 168 L160 184"/>
+      <path class="arw" d="M160 248 L160 264"/>
+      <path class="arw" d="M160 328 L160 344"/>
+      <path class="arw" d="M160 408 L160 424"/>
+
+      <!-- column 2 : explainability + interface -->
+      <text x="352" y="14" class="sub" style="font-weight:700;letter-spacing:1px;fill:#4fd1e0">EXPLAINABILITY &amp; INTERFACE — WORKING</text>
+      <rect class="box" x="352" y="26" width="300" height="98" rx="10" stroke="#4fd1e0"/>
+      <text x="368" y="50" class="lbl">Attribution: LIME / occlusion / attention</text>
+      <text x="368" y="70" class="sub">model-agnostic, per-token evidence</text>
+      <text x="368" y="90" class="sub">same masking mechanism as its evaluation, so the</text>
+      <text x="368" y="108" class="sub">explanation cannot drift from the faithfulness number</text>
+
+      <rect class="box" x="352" y="140" width="300" height="98" rx="10" stroke="#4fd1e0"/>
+      <text x="368" y="164" class="lbl">Measured faithfulness</text>
+      <text x="368" y="184" class="sub">comprehensiveness 0.163 · sufficiency 0.738 (n=6)</text>
+      <text x="368" y="204" class="sub">reported beside the prediction, not instead of it</text>
+      <text x="368" y="224" class="sub">generated rationale kept separate from model evidence</text>
+
+      <rect class="box" x="352" y="254" width="300" height="98" rx="10" stroke="#4fd1e0"/>
+      <text x="368" y="278" class="lbl">Web interface + FastAPI service</text>
+      <text x="368" y="298" class="sub">prediction · evidence · uncertainty · limitations</text>
+      <text x="368" y="318" class="sub">evaluation dashboard with explicit &ldquo;not run&rdquo; states</text>
+      <text x="368" y="338" class="sub">feedback → review queue, never an automatic label</text>
+
+      <path class="arw" d="M312 200 L350 130" style="stroke-dasharray:none"/>
+      <path class="arw" d="M502 126 L502 138"/>
+      <path class="arw" d="M502 240 L502 252"/>
+
+      <!-- column 3 : experimental lane -->
+      <text x="672" y="14" class="sub" style="font-weight:700;letter-spacing:1px;fill:#fbbf24">SEPARATE EXPERIMENTAL PATHWAY — IMPLEMENTED, NOT TRAINED</text>
+      <rect class="boxd" x="672" y="26" width="298" height="98" rx="10"/>
+      <text x="688" y="50" class="lbl">XLM-R / DistilBERT + context</text>
+      <text x="688" y="70" class="sub">class-weighted cross-entropy, early stopping</text>
+      <text x="688" y="90" class="sub">no checkpoint trained here → reported</text>
+      <text x="688" y="108" class="sub">available: false, never simulated</text>
+
+      <rect class="boxd" x="672" y="140" width="298" height="98" rx="10"/>
+      <text x="688" y="164" class="lbl">+ gated CLIP vision fusion</text>
+      <text x="688" y="184" class="sub">optional image / meme modality</text>
+      <text x="688" y="204" class="sub">requires an image-labelled corpus</text>
+      <text x="688" y="224" class="sub">unevaluated extension, not a capability claim</text>
+
+      <rect class="boxd" x="672" y="254" width="298" height="98" rx="10"/>
+      <text x="688" y="278" class="lbl">Flan-T5 policy + DPO on rationales</text>
+      <text x="688" y="298" class="sub">chosen vs rejected explanation pairs</text>
+      <text x="688" y="318" class="sub">unit-tested objective; not trained or evaluated</text>
+      <text x="688" y="338" class="sub">no reward number is claimed for it</text>
+
+      <!-- the experimental column is a training-time pathway: it is deliberately NOT wired into serving -->
+      <text x="672" y="368" class="sub" style="fill:#fbbf24">training-time pathway only — not wired into serving</text>
+
+      <!-- bottom : data reality -->
+      <text x="672" y="396" class="sub" style="font-weight:700;fill:#9fb0cc">DATA REALITY (VERIFIED)</text>
+      <text x="672" y="416" class="sub">36 synthetic records — 24 train / 6 val / 6 test</text>
+      <text x="672" y="436" class="sub">+ 36 author-built adversarial probes (5 flagged ambiguous)</text>
+      <text x="672" y="456" class="sub">sufficient to test the pipeline, not to claim performance</text>
+    </svg>
+
+    <p class="hint">Legend &nbsp; <span class="tag t-ok">trained &amp; verified</span>
+      <span class="tag t-wip">implemented, not trained</span>
+      <span class="tag t-opt">optional extension</span> &nbsp;|&nbsp;
+      Reward/DPO is a <em>training-time pathway</em>, not a component of every prediction, and multimodal processing is marked with its
+      true evaluation status.</p>
+  </section>
+
+  <!-- ================= 6. ALGORITHMS & RELEVANCE ================= -->
+  <section class="slide compact" id="s6" aria-label="Algorithms and relevance">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 4 &middot; Algorithm relevance</div>
+        <h1>Why these techniques, and where each one breaks</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>4</b> Relevance of algorithms &amp; techniques</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th style="width:19%">Technique</th><th style="width:27%">Role in the system</th><th style="width:27%">Why it is the right choice here</th><th>Limitation we accept</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Word + character n-gram TF&#8209;IDF with logistic regression</strong></td>
+          <td>The served classifier; the reproducible baseline every other system is compared against.</td>
+          <td>Deterministic, CPU&#8209;only, seconds to train, fully reproducible; character n&#8209;grams survive code&#8209;mixing and typos that English word lexicons miss.</td>
+          <td>No word order and no notion of <em>who</em> is speaking: it cannot resolve irony, quotation or implicit hate. We measure those failures instead of hiding them.</td>
+        </tr>
+        <tr>
+          <td><strong>Calibrated probabilities (Platt scaling)</strong> <span class="muted mono">[Guo&nbsp;2017]</span></td>
+          <td>Turns scores into probabilities a threshold can be trusted against.</td>
+          <td>Leaves ranking (AUROC) unchanged but cuts Brier score from 0.202 to 0.087 &mdash; what makes an abstention band meaningful rather than arbitrary.</td>
+          <td>Fitted on very few examples; ECE stays at 0.271, so probabilities are indicative, not numerically reliable.</td>
+        </tr>
+        <tr>
+          <td><strong>Cost&#8209;weighted three&#8209;way decision with abstention</strong> <span class="muted mono">[Madras&nbsp;2018]</span></td>
+          <td>Maps a probability to <em>hate / non&#8209;hate / needs_review</em> under an explicit error&#8209;cost model.</td>
+          <td>Moderation errors are asymmetric: visible hate costs more than over&#8209;flagging. A deferral region is the honest output for contested posts.</td>
+          <td>The selected point (fn:fp = 5:1) buys recall with false positives: probe accuracy falls to 0.639 with FPR 0.500. The cost model is a policy choice, not a neutral truth.</td>
+        </tr>
+        <tr>
+          <td><strong>Transformer classification: XLM&#8209;R / DistilBERT&#8209;multilingual</strong> <span class="muted mono">[Conneau&nbsp;2020; Caselli&nbsp;2021]</span></td>
+          <td>The planned contextual multilingual upgrade over n&#8209;grams.</td>
+          <td>Cross&#8209;lingual pretraining transfers to Hindi and romanized code&#8209;mixed text, where the baseline is weakest; class&#8209;weighted loss handles imbalance.</td>
+          <td><strong>Implemented but never trained here:</strong> no checkpoint, no GPU, no licensed corpus. No accuracy is claimed; reported as <span class="mono">available: false</span>.</td>
+        </tr>
+        <tr>
+          <td><strong>Explainability: LIME, occlusion, attention</strong> <span class="muted mono">[Ribeiro&nbsp;2016; Lundberg&nbsp;2017]</span></td>
+          <td>Produces per&#8209;token evidence for the moderate&#8209;confidence decisions a human will read.</td>
+          <td>Model&#8209;agnostic, so one explainer serves the baseline and any future transformer; occlusion needs no gradients, so it cannot silently mis&#8209;attribute.</td>
+          <td>Attribution is <em>not</em> evidence of intent, and plausibility is not faithfulness <span class="mono">[Jacovi&nbsp;2020]</span>. Attention weights are weak evidence &mdash; diagnostic only.</td>
+        </tr>
+        <tr>
+          <td><strong>Direct Preference Optimization on rationales</strong> <span class="muted mono">[Rafailov&nbsp;2023; Ouyang&nbsp;2022]</span></td>
+          <td>The reward&#8209;optimization experiment: align generated justifications with moderator&#8209;preferred explanations.</td>
+          <td>DPO avoids an explicit reward model and RL loop &mdash; both need far more data and compute than this project has &mdash; by optimizing directly on chosen/rejected pairs.</td>
+          <td><strong>Not trained.</strong> Also the riskiest part: weak negatives let the policy reward verbosity or fluent&#8209;but&#8209;unfaithful text, and the shipped reward score was self&#8209;referential until audited and fixed.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="cols c2" style="margin-top:2px">
+      <div class="note">We do <strong>not</strong> claim that TF&#8209;IDF understands context the way a transformer does, and we do
+        <strong>not</strong> claim that highlighted tokens prove an author's intent. Both statements would be false; the table marks the
+        difference explicitly.</div>
+      <div class="note" style="border-color:rgba(251,191,36,.6);background:rgba(251,191,36,.08)">
+        DPO objective actually implemented (encoder&ndash;decoder log&#8209;probability shift is unit&#8209;tested after a defect fix):
+        <span class="mono">L = &minus;log &sigma;( &beta; [ log &pi;<sub>&theta;</sub>(e<sup>+</sup>|x)/&pi;<sub>ref</sub>(e<sup>+</sup>|x) &minus; log &pi;<sub>&theta;</sub>(e<sup>&minus;</sup>|x)/&pi;<sub>ref</sub>(e<sup>&minus;</sup>|x) ] )</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 7. FEASIBILITY & CURRENT IMPLEMENTATION ================= -->
+  <section class="slide compact" id="s7" aria-label="Feasibility, resources and current implementation">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 2 &middot; Feasibility &amp; evidence</div>
+        <h1>Feasibility, resources, and exactly what exists today</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>2</b> Feasibility &amp; current implementation</span>
+    </div>
+
+    <div class="cols c3">
+      <div class="card" style="border-color:rgba(74,222,128,.4)">
+        <h3><span class="tag t-ok">complete</span>Working and verified</h3>
+        <ul>
+          <li>Preprocessing + calibrated baseline trained end to end.</li>
+          <li>FastAPI service &mdash; <span class="mono">/health, /api/model-info, /api/predict, /api/explain, /api/evaluation, /api/feedback, /api/vision-check</span> &mdash; loaded once per worker.</li>
+          <li>HTML/CSS/JS dashboard: six screens, verified in a browser.</li>
+          <li>Test suite: <strong>40 tests pass</strong> (exit 0, ~21&nbsp;s, CPU).</li>
+          <li>Experiment runner writes 8 machine&#8209;readable artifacts + a run manifest (seed 42, cpu, Python 3.13.9).</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(251,191,36,.45)">
+        <h3><span class="tag t-wip">implemented</span>Code exists, no checkpoint</h3>
+        <ul>
+          <li>XLM&#8209;R / DistilBERT classifier with class&#8209;weighted loss and early stopping.</li>
+          <li>Gated CLIP vision&#8209;fusion module (no image data present).</li>
+          <li>Flan&#8209;T5 policy + DPO trainer (objective unit&#8209;tested; never run).</li>
+          <li>Each is surfaced as <span class="mono">available: false</span> in the API and dashboard rather than filled with an estimate.</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(248,113,113,.4)">
+        <h3>Blockers, stated plainly</h3>
+        <ul>
+          <li>No GPU on the development machine; no licensed corpus (HateXplain / HASOC / MMHS150K) present.</li>
+          <li>No image data &rarr; multimodal cannot be evaluated.</li>
+          <li>No LaTeX toolchain (<span class="mono">pdflatex</span>), so the ACL draft is not compiled here.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cols c212" style="margin-top:2px">
+      <div class="card" style="border-color:rgba(94,169,255,.45)">
+        <h3>Data reality &mdash; counted directly from disk, not from a claim</h3>
+        <table style="margin-top:4px">
+          <thead><tr><th>Split</th><th class="num">Records</th><th class="num">Hate</th><th class="num">Non&#8209;hate</th><th>Languages</th></tr></thead>
+          <tbody>
+            <tr><td>Train</td><td class="num">24</td><td class="num">12</td><td class="num">12</td><td>17 en · 7 hi (4 code&#8209;mixed)</td></tr>
+            <tr><td>Validation</td><td class="num">6</td><td class="num">3</td><td class="num">3</td><td>5 en · 1 hi</td></tr>
+            <tr><td>Test</td><td class="num">6</td><td class="num">3</td><td class="num">3</td><td>5 en · 1 hi</td></tr>
+            <tr><td><strong>Total synthetic</strong></td><td class="num"><strong>36</strong></td><td class="num">18</td><td class="num">18</td><td>illustrative wiring data</td></tr>
+            <tr><td>Adversarial probes (diagnostic)</td><td class="num">36</td><td class="num">12</td><td class="num">24</td><td>11 categories, 5 flagged ambiguous</td></tr>
+          </tbody>
+        </table>
+        <p class="hint" style="margin-top:8px">36 hand&#8209;written records are enough to prove the pipeline, metrics and API work.
+          They are <strong>not</strong> a demographic sample and cannot establish scientific performance. Every count here is
+          verified by reading the JSONL files directly.</p>
+      </div>
+      <div class="card">
+        <h3>Why the project is still feasible</h3>
+        <ul>
+          <li>The full pipeline already runs, tests and reproduces on CPU with no GPU, so the <em>engineering</em> risk is retired.</li>
+          <li>Remaining work is data and training, not architecture: a conversion script maps licensed JSON/JSONL corpora into the project schema.</li>
+          <li>Compute needs are bounded and known: CPU config (DistilBERT&#8209;multilingual + Flan&#8209;T5&#8209;small) ≈ 8&nbsp;GB RAM, no GPU, slow; full config (XLM&#8209;R&#8209;base + CLIP) targets a ≥12&nbsp;GB GPU.</li>
+          <li>Every claim above reproduces with two commands: the experiment runner and the test suite.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 8. EVALUATION PLAN ================= -->
+  <section class="slide" id="s8" aria-label="Evaluation plan and expected outcomes">
+    <div class="head">
+      <div>
+        <div class="kicker">Requirement 3 &middot; Evaluation</div>
+        <h1>Evaluation plan &mdash; and the preliminary diagnostics we already have</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req"><b>3</b> Methodology &amp; evaluation</span>
+    </div>
+
+    <div class="cols c212">
+      <div class="card">
+        <h3>Planned protocol (target state)</h3>
+        <table>
+          <tbody>
+            <tr><td>Classification</td><td>macro&#8209;F1, weighted&#8209;F1, precision, recall, per&#8209;class F1, confusion matrix, separate FP and FN <em>rates</em>.</td></tr>
+            <tr><td>Calibration &amp; abstention</td><td>Brier score, ECE, validation&#8209;selected operating point, abstention rate reported alongside decided&#8209;case metrics.</td></tr>
+            <tr><td>Robustness</td><td>Quoted hate, counterspeech, reclaimed slurs, neutral identity mentions, non&#8209;hateful profanity, sarcasm, code&#8209;mixed; contested cases flagged.</td></tr>
+            <tr><td>Subgroups</td><td>Per&#8209;language and per&#8209;code&#8209;mix reporting with a minimum&#8209;support rule (categories under 3 items are reported as insufficient, not scored) <span class="mono">[Borkan&nbsp;2019]</span>.</td></tr>
+            <tr><td>Explanations</td><td>Comprehensiveness and sufficiency under one shared masking mechanism; rationale text judged separately from model evidence.</td></tr>
+            <tr><td>Ablations</td><td>Feature set (char / word / union) × calibration, selected by train&#8209;only CV; plus text&#8209;only vs +context vs +vision vs +DPO.</td></tr>
+            <tr><td>Statistics</td><td>Three seeds with mean ± std; confidence intervals once the corpus supports them.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="border-color:rgba(251,191,36,.45)">
+        <h3><span class="tag t-wip">preliminary</span>Engineering diagnostic, not a result</h3>
+        <table style="margin-top:4px">
+          <thead><tr><th>Configuration</th><th class="num">CV F1</th><th class="num">Test acc</th><th class="num">Brier</th><th class="num">Probe acc</th></tr></thead>
+          <tbody>
+            <tr><td>char n&#8209;grams (legacy)</td><td class="num">0.706</td><td class="num">0.667</td><td class="num">0.236</td><td class="num">0.639</td></tr>
+            <tr><td>word + char + Platt <strong>(selected)</strong></td><td class="num">0.831</td><td class="num">1.000</td><td class="num">0.087</td><td class="num">0.750</td></tr>
+          </tbody>
+        </table>
+        <p class="hint" style="margin-top:8px"><strong>Read this with its sample sizes.</strong> Test = 6 items, so one flipped
+          example moves accuracy by 16.7 points; CV covers 24 training records; the 36&#8209;item probe set is author&#8209;constructed,
+          not a public benchmark. Probe accuracy 0.639&nbsp;&rarr;&nbsp;0.750 overall, and 0.710&nbsp;&rarr;&nbsp;0.806 on the unambiguous subset.</p>
+        <p class="hint" style="margin-top:6px">At the deployed operating point (&theta;&nbsp;=&nbsp;0.394, fn:fp&nbsp;=&nbsp;5:1) probe accuracy is
+          <strong>0.639</strong> with FPR&nbsp;0.500 / FNR&nbsp;0.083: recall is bought with false positives, and 1 of 6 test items falls
+          into <em>needs_review</em>. Calibrated <em>word</em> features score 0.806 on probes while CV prefers the union (0.750) &mdash; with
+          this little data the selection signal and the held&#8209;out signal disagree, which is itself a finding.</p>
+        <p class="hint" style="margin-top:6px">Faithfulness currently measured: comprehensiveness 0.163, sufficiency 0.738 (n&nbsp;=&nbsp;6) &mdash;
+          reported because a low comprehensiveness means the top tokens do <em>not</em> explain much.</p>
+      </div>
+    </div>
+
+    <div class="note">Expected outcome of Milestone&nbsp;2: the same protocol run on a licensed corpus with the transformer and, if the
+      compute allows, the DPO variant &mdash; so that the comparison table shows measured numbers for all four systems or an explicit
+      reason why a system is absent.</div>
+  </section>
+
+  <!-- ================= 9. CONCLUSION ================= -->
+  <section class="slide compact" id="s9" aria-label="Conclusion, limitations and next steps">
+    <div class="head">
+      <div>
+        <div class="kicker">Closing &middot; limitations &amp; next steps</div>
+        <h1>Conclusion, limitations and what happens next</h1>
+        <div class="rule"></div>
+      </div>
+      <span class="req">All four requirements addressed &middot; 9 slides</span>
+    </div>
+
+    <div class="cols c212">
+      <div class="card" style="border-color:rgba(94,169,255,.45)">
+        <h3>Contribution so far</h3>
+        <p>HateXAI is a working, tested, reproducible research prototype that treats a post as
+          <span class="mono">x = {T, V, C}</span> and returns an auditable decision. The measured contribution is deliberately narrow:
+          a calibrated CPU baseline with a cost&#8209;weighted three&#8209;way decision, an eight&#8209;configuration feature/calibration
+          ablation selected by train&#8209;only cross&#8209;validation, explanation faithfulness that is <em>measured</em> rather than
+          illustrated, and an adversarial probe set that exposes systematic failure on quoted hate and counterspeech. The transformer,
+          vision and DPO components are implemented and reported as untrained &mdash; not presented as results.</p>
+        <div class="note" style="margin-top:10px"><strong>Intended outcome:</strong> an ACL&#8209;format study of whether
+          reward&#8209;guided rationales plus an explicit human&#8209;review outcome produce trustworthy moderation, not just a higher
+          accuracy number.</div>
+      </div>
+      <div class="card" style="border-color:rgba(248,113,113,.4)">
+        <h3>Limitations we will not paper over</h3>
+        <ul>
+          <li>All headline numbers come from 36 hand&#8209;written records and an author&#8209;constructed probe set: engineering evidence, not scientific evidence.</li>
+          <li>No transformer, vision or DPO system has been trained or evaluated, so no claim is made for them.</li>
+          <li>The false&#8209;negative&#8209;averse operating point produces a 0.50 false&#8209;positive rate on probes &mdash; the cost model is a policy choice, and it has consequences.</li>
+          <li>Calibration is fitted on too few examples to be numerically reliable (ECE 0.271).</li>
+          <li>Attribution is not evidence of intent; labels for hate speech are culturally contested.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Next steps</h3>
+      <div class="cols c3" style="gap:10px">
+        <ul>
+          <li><strong>1.</strong> Prepare a properly licensed research corpus (HateXplain, HASOC, MMHS150K) and document provenance, licensing and preprocessing.</li>
+          <li><strong>2.</strong> Establish a leakage&#8209;aware, stratified baseline protocol on that corpus and freeze it.</li>
+          <li><strong>3.</strong> Train and evaluate the transformer with class weighting, then compare against the baseline.</li>
+        </ul>
+        <ul>
+          <li><strong>4.</strong> Train the DPO variant on real, reviewed preference pairs and audit the reward it actually optimizes.</li>
+          <li><strong>5.</strong> Validate explainability (faithfulness, stability) and fairness behaviour per language and code&#8209;mix subgroup.</li>
+          <li><strong>6.</strong> Evaluate multimodal capability only if image&#8209;labelled data and compute become available.</li>
+        </ul>
+        <ul>
+          <li><strong>7.</strong> Complete the experimental analysis, error analysis and the ACL&#8209;format paper with logged versions and hyperparameters.</li>
+          <li><span class="muted">Every number in this deck is reproducible with:</span></li>
+          <li><span class="mono hint">python experiments/run_experiments.py</span></li>
+          <li><span class="mono hint">python -m pytest tests -q&nbsp;&nbsp;→ 40 passed</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto">
+      <div class="hint">HateXAI &middot; Bennett University &middot; guided by Dr.&nbsp;Pradeepika Verma</div>
+      <div class="eq" style="font-size:16px">Thank you &mdash; Questions &amp; Discussion</div>
+    </div>
+  </section>
+
+  <div id="bar"><span></span></div>
+  <div id="dots" role="tablist" aria-label="Slide navigation"></div>
+  <div id="nav">
+    <span id="counter">1 / 9</span>
+    <button id="prev" aria-label="Previous slide">&larr;</button>
+    <button id="next" aria-label="Next slide">&rarr;</button>
+    <button id="full" aria-label="Toggle full screen">Full screen</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var stage  = document.getElementById('stage');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var dots   = document.getElementById('dots');
+  var bar    = document.querySelector('#bar span');
+  var counter= document.getElementById('counter');
+  var total  = slides.length;
+  var i = 0;
+
+  /* --- keep the 16:9 stage fully visible at any window/laptop size --- */
+  function fit() {
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    var x = (window.innerWidth  - 1280 * s) / 2;
+    var y = (window.innerHeight -  720 * s) / 2;
+    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  for (var d = 0; d < total; d++) {
+    var dot = document.createElement('i');
+    dot.setAttribute('role','tab');
+    dot.title = 'Slide ' + (d + 1);
+    dot.dataset.go = d;
+    dots.appendChild(dot);
+  }
+
+  function show(n) {
+    i = Math.max(0, Math.min(total - 1, n));
+    slides.forEach(function (s, k) { s.classList.toggle('active', k === i); });
+    Array.prototype.forEach.call(dots.children, function (c, k) { c.classList.toggle('on', k === i); });
+    bar.style.width = ((i + 1) / total * 100) + '%';
+    counter.textContent = (i + 1) + ' / ' + total;
+    if (location.hash !== '#s' + (i + 1)) history.replaceState(null, '', '#s' + (i + 1));
+  }
+
+  document.getElementById('prev').addEventListener('click', function () { show(i - 1); });
+  document.getElementById('next').addEventListener('click', function () { show(i + 1); });
+  document.getElementById('full').addEventListener('click', function () {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  });
+  dots.addEventListener('click', function (e) {
+    if (e.target.dataset && e.target.dataset.go !== undefined) show(parseInt(e.target.dataset.go, 10));
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter') { show(i + 1); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { show(i - 1); e.preventDefault(); }
+    else if (k === 'Home') { show(0); e.preventDefault(); }
+    else if (k === 'End') { show(total - 1); e.preventDefault(); }
+    else if (k === 'f' || k === 'F') { document.getElementById('full').click(); }
+  });
+
+  var start = location.hash.match(/^#s(\d+)$/);
+  show(start ? parseInt(start[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>

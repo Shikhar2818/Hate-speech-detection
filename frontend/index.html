@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HateXAI — Explainable Hate Speech Detection</title>
+<meta name="description" content="Explainable, multilingual hate-speech detection with calibrated abstention and reward-optimized explanations." />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-page="home">
+<header class="site-header">
+  <div class="container inner">
+    <a class="brand" href="index.html">
+      <span class="logo" aria-hidden="true"></span>
+      <span>HateXAI <small>Explainable moderation research</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a data-nav="home" href="index.html">Overview</a>
+      <a data-nav="analyze" href="analyze.html">Analyze</a>
+      <a data-nav="dashboard" href="dashboard.html">Evaluation</a>
+      <a data-nav="feedback" href="feedback.html">Feedback</a>
+      <a data-nav="research" href="research.html">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <canvas id="hero-canvas" class="hero-canvas" aria-hidden="true"></canvas>
+    <div class="container">
+      <span class="badge">Research prototype · human-in-the-loop</span>
+      <h1>Hate speech detection you can actually audit.</h1>
+      <p class="lead">
+        A multilingual, context-aware classifier that returns a decision, a calibrated confidence,
+        token-level evidence, and an explicit <strong>needs-review</strong> outcome when the model is unsure —
+        instead of forcing every ambiguous post into a binary label.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="analyze.html">Analyze content</a>
+        <a class="btn btn-secondary" href="dashboard.html">View evaluation</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container" style="padding-bottom: 30px;">
+    <div class="grid grid-4">
+      <div class="card feature reveal">
+        <div class="icon" aria-hidden="true">⌘</div>
+        <h3>Detection</h3>
+        <p class="muted small">Word + character n-gram baseline with Platt-calibrated probabilities, sharing one feature-fusion path with the transformer model.</p>
+      </div>
+      <div class="card feature reveal">
+        <div class="icon" aria-hidden="true">✦</div>
+        <h3>Explainability</h3>
+        <p class="muted small">LIME and delete-one occlusion attributions, plus measured comprehensiveness and sufficiency — not decorative highlights.</p>
+      </div>
+      <div class="card feature reveal">
+        <div class="icon" aria-hidden="true">◍</div>
+        <h3>Multilingual</h3>
+        <p class="muted small">English, Hindi (Devanagari and romanised) and Hinglish code-mixing, with per-language error reporting.</p>
+      </div>
+      <div class="card feature reveal">
+        <div class="icon" aria-hidden="true">↻</div>
+        <h3>Human review loop</h3>
+        <p class="muted small">Users report questionable predictions; reports are stored as review candidates and never auto-promoted to training labels.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container grid grid-2" style="padding-bottom: 40px;">
+    <div class="card reveal">
+      <div class="card-head"><h2 style="margin:0">How a post is handled</h2></div>
+      <ol class="muted" style="padding-left: 20px;">
+        <li><strong>Preprocess.</strong> URLs and mentions are normalized; script-mixing flags code-mixed text.</li>
+        <li><strong>Score.</strong> Text and context are fused into one canonical input and scored once.</li>
+        <li><strong>Decide.</strong> A cost-weighted threshold produced a three-way outcome: hate, non-hate, or human review.</li>
+        <li><strong>Explain.</strong> Influential tokens are highlighted, with faithfulness numbers attached.</li>
+        <li><strong>Escalate.</strong> Disputed or uncertain outputs feed a review queue, not the test set.</li>
+      </ol>
+    </div>
+    <div class="card reveal">
+      <div class="card-head"><h2 style="margin:0">What this project does <em>not</em> claim</h2></div>
+      <ul class="muted" style="padding-left: 20px;">
+        <li>No vision or meme analysis: no image model is trained or evaluated.</li>
+        <li>No headline benchmark numbers: the shipped training set is a 30-record wiring dataset.</li>
+        <li>Attribution is not proof of intent, and generated rationales are kept separate from model evidence.</li>
+        <li>Not an enforcement system. It is built for assisted moderation with a human in the loop.</li>
+      </ul>
+      <a class="btn btn-ghost btn-sm" href="research.html">Read the full limitations →</a>
+    </div>
+  </section>
+
+  <section class="container" style="padding-bottom: 50px;">
+    <div class="card reveal">
+      <div class="card-head"><h2 style="margin:0">Try a hard case</h2></div>
+      <p class="muted">These diagnostic probes are the cases binary classifiers usually get wrong. Open the workspace and paste one.</p>
+      <div class="chips" id="home-examples">
+        <button class="chip" data-text="The poster said &quot;immigrants are vermin&quot; and the audience applauded. I am quoting it here because it should be condemned.">Quoted hate</button>
+        <button class="chip" data-text="Anyone claiming that community are vermin is repeating a lie. Please stop sharing that meme.">Counterspeech</button>
+        <button class="chip" data-text="Fuck, the build broke again five minutes before the demo.">Non-hateful profanity</button>
+        <button class="chip" data-text="We should just make sure our kids go to a school with the right kind of children.">Implicit hate</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>HateXAI · research prototype for assisted moderation. License: see repository LICENSE. © <span id="year"></span></p>
+    <p class="small">Predictions and explanations may be wrong. Always keep a human reviewer in the loop.</p>
+  </div>
+</footer>
+
+<script src="js/app.js"></script>
+<script>
+  // Forward a chosen example to the workspace.
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("#home-examples .chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        sessionStorage.setItem("hatexai.prefill", chip.dataset.text || "");
+        window.location.href = "analyze.html";
+      });
+    });
+  });
+</script>
+</body>
+</html>
