@@ -71,6 +71,9 @@ function renderResult(result, input) {
       el("span", { class: "muted small", text: `Language estimate: ${result.language}${result.code_mixed ? " · mixed scripts" : ""}` }),
     ])
   );
+  if (verdict === "non_hate") {
+    body.append(el("p", { class: "muted small", text: "Posts classified as non-hate can still contain insults or profanity." }));
+  }
 
   // Probability bars
   const bars = el("div", { class: "prob-bars" });
