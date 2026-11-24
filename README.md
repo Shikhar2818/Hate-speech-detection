@@ -19,6 +19,7 @@ abstention outcome for ambiguous inputs.
 | Component | State |
 | --- | --- |
 | Preprocessing, calibrated TF-IDF baseline, robustness + faithfulness evaluation | **Working and reproducible** |
+| TF-IDF on the public HateXplain benchmark | **Trained and evaluated on held-out English posts** |
 | FastAPI backend (`/api/predict`, `/api/explain`, `/api/evaluation`, `/api/feedback`, …) | **Working, tested** |
 | HTML/CSS/JS dashboard (detection, explainability, evaluation, feedback, research) | **Working, tested** |
 | XLM-R / DistilBERT transformer classifier | **Implemented; no checkpoint trained in this environment** |
@@ -94,6 +95,29 @@ Key design decisions, and why:
 ---
 
 ## Measured results (reproducible)
+
+### Public HateXplain benchmark
+
+```bash
+python scripts/run_pipeline.py --config configs/hatexplain_baseline.yaml --stage baseline
+```
+
+Run the `hatexplain` data preparation command below first. Training uses the existing word and
+character TF-IDF model with logistic regression and three group-aware calibration folds on CPU.
+The test split is evaluated after the checkpoint is saved and the review band is selected on validation.
+
+| Split | N | Macro F1 | Macro precision | Macro recall | Accuracy | FPR | FNR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Validation | 1,920 | 0.795 | 0.822 | 0.779 | 0.836 | 0.072 | 0.369 |
+| Test | 1,924 | 0.792 | 0.813 | 0.778 | 0.832 | 0.082 | 0.362 |
+
+At the binary decision threshold, the test confusion matrix was `[[1221, 109], [215, 379]]`,
+with rows for gold non-hate and hate. AUROC was 0.877, Brier score was 0.125 and ECE was 0.020.
+The validation-selected review policy routed 284 test posts (14.8%) to human review. All test
+records have the English release label. Evaluation across languages requires additional licensed data.
+The checkpoint and JSON reports are written under `outputs/hatexplain-baseline-v1/`.
+
+### Synthetic diagnostics
 
 Run `python experiments/run_experiments.py` to regenerate. Generated on the bundled diagnostic data.
 
@@ -268,8 +292,8 @@ slides/                   defense deck
 
 ## Limitations and responsible use
 
-- The shipped model is trained on a 30-record synthetic set. It is a software demonstration, not a deployable
-  classifier, and its probabilities on the bundled test split are compressed near 0.5.
+- The default demo model is trained on 24 synthetic examples. Its probabilities on the 6-record
+  demo test split are compressed near 0.5.
 - No vision or meme capability is trained or evaluated; image inputs are validated and rejected.
 - Attribution is **not** evidence of intent, and generated rationales are displayed separately from
   model-derived evidence.

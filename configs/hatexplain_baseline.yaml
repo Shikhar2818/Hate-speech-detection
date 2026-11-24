@@ -1,0 +1,21 @@
+seed: 42
+output_dir: outputs/hatexplain-baseline-v1
+device: cpu
+model_version: linear-hatexplain-v1
+benchmark_name: HateXplain
+
+data:
+  manifest_path: data/processed/hatexplain-v1/manifest.json
+  train_path: data/processed/hatexplain-v1/train.jsonl
+  val_path: data/processed/hatexplain-v1/val.jsonl
+  test_path: data/processed/hatexplain-v1/test.jsonl
+
+baseline:
+  feature_set: union
+  calibrate: true
+  calibration_cv: 3
+
+eval:
+  fn_cost: 5.0
+  fp_cost: 1.0
+  review_band: 0.10

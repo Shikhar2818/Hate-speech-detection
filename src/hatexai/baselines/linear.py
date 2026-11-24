@@ -7,6 +7,7 @@ import joblib
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from hatexai.data.preprocess import extract_text_features, fuse_text
@@ -28,12 +29,17 @@ def load_text_split(
     """Load a split using the same canonical fusion as the transformer model."""
     texts, labels = [], []
     for item in read_jsonl(path):
-        feats = extract_text_features(item["text"])
+        language = item.get("language")
+        code_mixed = item.get("code_mixed")
+        if include_metadata and ("language" not in item or "code_mixed" not in item):
+            feats = extract_text_features(item["text"])
+            language = item.get("language", feats.language)
+            code_mixed = item.get("code_mixed", feats.code_mixed)
         fused = fuse_text(
             item["text"],
             item.get("context", ""),
-            language=item.get("language", feats.language),
-            code_mixed=bool(item.get("code_mixed", feats.code_mixed)),
+            language=language,
+            code_mixed=bool(code_mixed),
             include_metadata=include_metadata,
         )
         texts.append(fused)
@@ -45,7 +51,7 @@ def _make_classifier() -> LogisticRegression:
     return LogisticRegression(max_iter=3000, class_weight="balanced")
 
 
-def build_linear_pipeline(feature_set: str = "union", calibrate: bool = False, cv: int = 3):
+def build_linear_pipeline(feature_set: str = "union", calibrate: bool = False, cv=3):
     """Build the baseline pipeline.
 
     ``calibrate`` wraps the pipeline in Platt (sigmoid) scaling fitted by
@@ -103,10 +109,15 @@ def train_linear_baseline(config: dict[str, Any]):
     texts, labels = load_text_split(config["data"]["train_path"])
     if len(set(labels)) < 2:
         raise ValueError("training split must contain both classes")
+    cv = min(settings["calibration_cv"], len(labels))
+    if settings["calibrate"] and config["data"].get("manifest_path"):
+        groups = [row["duplicate_group"] for row in read_jsonl(config["data"]["train_path"])]
+        splitter = StratifiedGroupKFold(n_splits=cv, shuffle=True, random_state=config["seed"])
+        cv = list(splitter.split(texts, labels, groups))
     model = build_linear_pipeline(
         feature_set=settings["feature_set"],
         calibrate=settings["calibrate"],
-        cv=min(settings["calibration_cv"], len(labels)),
+        cv=cv,
     )
     model.fit(texts, labels)
 

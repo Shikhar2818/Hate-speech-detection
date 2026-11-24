@@ -17,8 +17,22 @@ The generated manifest and exclusion log are under `data/processed/hatexplain-v1
 The HASOC 2021 and Hateful Memes readers have fixture coverage. End-to-end verification requires
 authorized HASOC English/Hindi exports with fine labels and a Hateful Memes Phase 2 archive.
 HASOC's mixed-script flag is heuristic and requires row-level annotations to assess romanized-only
-code mixing. Meme labels are needed for local test metrics. The dataset stage produces no model
-checkpoint. The host has CPU-only PyTorch.
+code mixing. Meme labels are needed for local test metrics. The host has CPU-only PyTorch.
+
+## Public baseline update (2026-11-24)
+
+The existing calibrated word/character TF-IDF classifier was fitted on the prepared HateXplain train
+split. Three group-aware calibration folds kept duplicate groups together. The checkpoint was saved
+and the review policy chosen on validation before scoring the official English test split. On
+1,924 held-out posts, macro F1 was 0.792, macro precision 0.813, macro recall 0.778 and accuracy 0.832.
+The binary false-positive rate was 0.082 and the false-negative rate was 0.362. The validation-selected
+policy sent 284 test posts (14.8%) to review.
+
+Reproduce with `python scripts/run_pipeline.py --config configs/hatexplain_baseline.yaml --stage baseline`
+after building the HateXplain profile. The checkpoint is
+`outputs/hatexplain-baseline-v1/checkpoints/linear_baseline.joblib`. The corresponding `eval/`
+directory contains the training record, classification metrics and review-policy results. This run
+supports an English baseline estimate. Multilingual performance, vision and DPO remain pending.
 
 ---
 
