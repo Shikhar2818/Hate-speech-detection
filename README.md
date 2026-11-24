@@ -62,7 +62,7 @@ configuration is needed in the common case. Interactive API docs are at `/docs`.
 ### 3. Run the tests
 
 ```bash
-python -m pytest tests -q     # 40 tests
+python -m pytest tests -q
 ```
 
 ---
@@ -204,15 +204,41 @@ smoke-testing the code path, not for producing paper numbers.
 | Synthetic wiring set | `data/synthetic/` | 24 train / 6 val / 6 test (36 records, counted from disk). Illustrative only; **not a benchmark** |
 | Adversarial probes | `data/probes/hard_cases.jsonl` | 36 author-constructed diagnostic cases, with an `ambiguous` flag |
 
-Convert licensed public corpora to the project schema:
+Use the release-aware profiles in [configs/public_data.yaml](configs/public_data.yaml). Run these commands
+from the repository root. Keep authorized source files and generated data under the ignored
+`data/raw/` and `data/processed/` directories.
+
+| Profile | Required source files | Label policy |
+| --- | --- | --- |
+| `hatexplain` | `Data/dataset.json`, `Data/post_id_divisions.json`, and `LICENSE` from the [pinned HateXplain release](https://github.com/hate-alert/HateXplain/tree/01d742279dac941981f53806154481c0e15ee686), saved under `data/raw/hatexplain/` | Take the majority among the original three classes, then map only `hatespeech` to 1. Preserve the original votes, tokens and rationale masks. |
+| `multilingual` | The HateXplain files and authorized [HASOC 2021](https://hasocfire.github.io/hasoc/2021/dataset.html) English and Hindi subtask 1 train/test exports with `task_1` and fine labels in `task_2`. Place the exports at the paths in the profile or set the paths in a local config. | Map `HATE` to 1 and `NOT`, `OFFN` and `PRFN` to 0. Exclude coarse-only `HOF` because it combines hate, offensive speech and profanity. |
+| `hateful-memes` | Authorized [Hateful Memes](https://www.drivendata.org/competitions/64/hateful-memes/) Phase 2 archive with `train.jsonl`, `dev_unseen.jsonl`, `test_unseen.jsonl` and `img/` | Keep official binary labels and preserve unlabeled test IDs. |
 
 ```bash
-python scripts/prepare_public_data.py --input path/to/raw.jsonl --output data/processed/train.jsonl
+python scripts/prepare_public_data.py --profile hatexplain --output data/processed/hatexplain-v1
+python scripts/prepare_public_data.py --profile multilingual --authorized-sources --output data/processed/multilingual-v1
+python scripts/prepare_public_data.py --profile hateful-memes --authorized-sources --output data/processed/hateful-memes-v1
 ```
 
-Recommended corpora: [HateXplain](https://github.com/punyajoy/HateXplain) (labels + rationales),
-HASOC (Hindi/English/code-mix), OLID/SOLID, MMHS150K / Hateful Memes (multimodal).
-**Do not** scrape private accounts; follow platform terms and dataset licences. Processed data is git-ignored.
+The output directory is versioned by the caller. Each build writes split JSONL files, an exclusion log
+and a manifest with source revisions, input/output SHA-256 digests, and label, language, code-mix,
+image and duplicate group counts. A meme test set without labels is written to `test_unlabeled.jsonl`.
+Image paths refer to the local dataset directory from the profile. Run image consumers from the same
+working directory or configure an absolute dataset root.
+
+Official test IDs stay in test. Exact text matches, near text matches at character-trigram Jaccard
+similarity of at least 0.85 for strings of 20 or more characters, and exact or perceptually similar
+images form groups across inputs. The build removes overlapping rows from train or validation in
+favor of the higher-priority split. It derives HASOC validation from eligible training groups.
+The rule can remove shared meme captions or related images from development data. The manifest
+records these exclusions for reporting. The `language` field refers to the release, and the
+`code_mixed` flag detects Latin/Indic script mixing. Romanized-only code mixing requires independent
+annotation. The broad-label HASOC conversational track is outside the strict hate label profile.
+
+The HateXplain build was verified on the official data with 15,335 train, 1,920 validation and 1,924
+test rows. HASOC and Hateful Memes require authorized local archives for end-to-end verification.
+The original `--input` converter remains available for legacy files. Use the profile commands for
+benchmark preparation.
 
 JSONL record format:
 

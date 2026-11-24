@@ -8,7 +8,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from hatexai.utils import read_jsonl, write_jsonl
+from hatexai.data.public_pipeline import build_public_dataset
+from hatexai.utils import load_config, read_jsonl, write_jsonl
 
 
 def convert_records(in_path: Path, out_path: Path) -> None:
@@ -43,11 +44,28 @@ def convert_records(in_path: Path, out_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Convert public hate-speech files to JSONL")
-    parser.add_argument("--input", required=True)
+    parser = argparse.ArgumentParser(description="Prepare public hate-speech benchmark splits")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--profile", help="Benchmark profile name")
+    source.add_argument("--input", help="Legacy single-file conversion")
+    parser.add_argument("--config", default=str(ROOT / "configs" / "public_data.yaml"))
+    parser.add_argument("--authorized-sources", action="store_true",
+                        help="Confirm authorized local copies for restricted corpora")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    convert_records(Path(args.input), Path(args.output))
+    if args.input:
+        convert_records(Path(args.input), Path(args.output))
+        return
+    profiles = load_config(args.config)
+    if args.profile not in profiles:
+        parser.error(f"Unknown profile {args.profile!r}; choose from {', '.join(profiles)}")
+    try:
+        manifest = build_public_dataset(profiles[args.profile], Path(args.output),
+                                        authorized_sources=args.authorized_sources)
+    except (ValueError, OSError) as exc:
+        parser.exit(1, f"{exc}\n")
+    print(", ".join(f"{name}={stats['total']}" for name, stats in manifest["splits"].items()))
+    print(f"wrote benchmark manifest to {Path(args.output) / 'manifest.json'}")
 
 
 if __name__ == "__main__":

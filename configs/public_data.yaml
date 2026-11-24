@@ -1,0 +1,37 @@
+hatexplain:
+  seed: 42
+  sources:
+    - &hatexplain
+      kind: hatexplain
+      root: data/raw/hatexplain
+      files:
+        dataset.json: dataset.json
+        post_id_divisions.json: post_id_divisions.json
+        LICENSE: LICENSE
+
+multilingual:
+  seed: 42
+  sources:
+    - *hatexplain
+    - kind: hasoc2021
+      language: en
+      root: data/raw/hasoc2021/en
+      files:
+        train: train.csv
+        test: test.csv
+    - kind: hasoc2021
+      language: hi
+      root: data/raw/hasoc2021/hi
+      files:
+        train: train.csv
+        test: test.csv
+
+hateful-memes:
+  seed: 42
+  sources:
+    - kind: hateful_memes
+      root: data/raw/hateful_memes
+      files:
+        train: train.jsonl
+        val: dev_unseen.jsonl
+        test: test_unseen.jsonl

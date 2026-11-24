@@ -1,5 +1,27 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## Dataset integration update (2026-11-24)
+
+This section records the current dataset state. The audit below is the historical review of `58a9ec8`.
+The current tree already has the FastAPI dashboard, TF-IDF demo checkpoint support, and evaluation
+implementations. The older audit's duplicate-check item was marked complete before the corresponding
+code existed in the checked-in tree.
+
+The release-aware preparation command verified the official HateXplain files against pinned
+SHA-256 digests. Of 20,148 source posts, 919 had no majority under the original three-way annotation
+scheme and were outside the published splits. The overlap checks removed 24 train and 2 validation
+rows from cross-split duplicate groups and 24 exact train duplicates. The final counts are
+15,335 train, 1,920 validation and 1,924 test. All official test IDs remain in the test split.
+The generated manifest and exclusion log are under `data/processed/hatexplain-v1/`.
+
+The HASOC 2021 and Hateful Memes readers have fixture coverage. End-to-end verification requires
+authorized HASOC English/Hindi exports with fine labels and a Hateful Memes Phase 2 archive.
+HASOC's mixed-script flag is heuristic and requires row-level annotations to assess romanized-only
+code mixing. Meme labels are needed for local test metrics. The dataset stage produces no model
+checkpoint. The host has CPU-only PyTorch.
+
+---
+
 **Audit date:** 2026-10-13
 **Auditor role:** Senior ML / NLP / XAI / full-stack review
 **Repository commit audited:** `58a9ec8` ("initial ready"), branch `main`
