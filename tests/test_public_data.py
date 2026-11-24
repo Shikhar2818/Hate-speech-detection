@@ -10,6 +10,54 @@ from hatexai.data.public_pipeline import build_public_dataset
 from hatexai.data.public_sources import file_digest, read_cadd, read_hasoc, read_hatexplain, read_hifox, record
 from hatexai.data.public_splits import image_matches, isolate_splits, text_matches
 from hatexai.utils import read_jsonl, write_json, write_jsonl
+from scripts.extend_public_training import extend_training, read_hinglish
+
+
+def test_supplemental_hinglish_uses_author_labels(tmp_path):
+    path = tmp_path / "hinglish.csv"
+    path.write_text("comment,label\naaj weather nice,2\ncompound example,3\nEnglish example,1\n,3\n",
+                    encoding="utf-8")
+    rows, excluded = read_hinglish(path)
+    assert [(row["label"], row["language"], row["code_mixed"]) for row in rows] == [
+        (0, "hi-en", True), (1, "hi-en", True),
+    ]
+    assert excluded == {"other_language_or_missing_label_or_text": 2}
+
+
+def test_training_extension_preserves_holdouts_and_removes_overlap(tmp_path):
+    def prepared(name, by_split):
+        root = tmp_path / name
+        manifest = {"seed": 42, "sources": [{"kind": name}], "overlap_policy": {}, "splits": {}}
+        for split, rows in by_split.items():
+            path = root / f"{split}.jsonl"
+            write_jsonl(path, rows)
+            manifest["splits"][split] = {"file": path.name, "sha256": file_digest(path)}
+        write_json(root / "manifest.json", manifest)
+        return root
+
+    heldout_text = "This sentence appears in the original English test"
+    reference = prepared("hatexplain", {
+        "train": [record("hatexplain", "1", "train", "original training post", 0, "en")],
+        "val": [record("hatexplain", "2", "val", "validation post", 0, "en")],
+        "test": [record("hatexplain", "3", "test", heldout_text, 1, "en")],
+    })
+    extra = prepared("cadd", {"train": [
+        {**record("cadd", "1", "train", heldout_text + ".", 1, "en"), "context": "parent a"},
+        {**record("cadd", "2", "train", "related reply", 0, "en"), "context": "parent a"},
+        {**record("cadd", "3", "train", "new comment", 1, "en"), "context": "parent b"},
+    ]})
+    output = tmp_path / "combined"
+    manifest = extend_training(reference, extra, output)
+    for split in ("val", "test"):
+        assert (reference / f"{split}.jsonl").read_bytes() == (output / f"{split}.jsonl").read_bytes()
+    rows = read_jsonl(output / "train.jsonl")
+    assert {row["id"] for row in rows} == {"hatexplain:1", "cadd:3"}
+    assert all(not row["context"] for row in rows)
+    assert manifest["training_extension"]["extra_retained_rows"] == 1
+
+    (extra / "train.jsonl").write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        extend_training(reference, extra, tmp_path / "invalid")
 
 
 def test_hatexplain_majority_before_mapping_and_raw_rationales(tmp_path):
