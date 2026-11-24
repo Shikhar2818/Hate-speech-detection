@@ -35,3 +35,25 @@ hateful-memes:
         train: train.jsonl
         val: dev_unseen.jsonl
         test: test_unseen.jsonl
+
+english-hinglish:
+  seed: 42
+  sources:
+    - *hatexplain
+    - kind: hifox
+      language: hi-en
+      root: data/raw/hifox
+      files:
+        train: Train_Task_A.csv
+        val: Val_Task_A.csv
+        test: Test_Task_A.csv
+
+cadd:
+  seed: 42
+  sources:
+    - kind: cadd
+      root: data/raw/cadd
+      files:
+        train: CADD_train.json
+        val: CADD_dev.json
+        test: CADD_test.json

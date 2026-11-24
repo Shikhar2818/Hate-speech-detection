@@ -8,12 +8,16 @@ from collections import Counter
 from pathlib import Path
 
 from hatexai.data.public_sources import (
+    CADD_REVISION,
+    HIFOX_REVISION,
     HATEXPLAIN_FILES,
     HATEXPLAIN_REVISION,
     file_digest,
+    read_cadd,
     read_hasoc,
     read_hateful_memes,
     read_hatexplain,
+    read_hifox,
 )
 from hatexai.data.public_splits import (
     NEAR_IMAGE_DISTANCE,
@@ -26,6 +30,18 @@ from hatexai.utils import write_json, write_jsonl
 
 
 SOURCE_DETAILS = {
+    "cadd": {
+        "source": "https://github.com/nlpcl-lab/CADD_dataset",
+        "terms": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "revision": CADD_REVISION,
+        "label_policy": "L1 hate speech (1) maps to 1; other L1 labels map to 0",
+    },
+    "hifox": {
+        "source": "https://huggingface.co/datasets/yashbleh/HiFox_Dataset",
+        "terms": "https://huggingface.co/datasets/yashbleh/HiFox_Dataset/blob/main/README.md#license-and-terms-of-use",
+        "revision": HIFOX_REVISION,
+        "label_policy": "Task A Hate column; local research experiment",
+    },
     "hatexplain": {
         "source": "https://github.com/hate-alert/HateXplain",
         "terms": f"https://github.com/hate-alert/HateXplain/blob/{HATEXPLAIN_REVISION}/LICENSE",
@@ -66,7 +82,7 @@ def build_public_dataset(profile, output: Path, *, authorized_sources=False):
     rows, sources = [], []
     for spec in profile["sources"]:
         kind = spec["kind"]
-        if kind != "hatexplain" and not authorized_sources:
+        if kind in {"hasoc2021", "hateful_memes"} and not authorized_sources:
             raise ValueError(f"Use locally authorized {kind} files and pass --authorized-sources")
         root = Path(spec["root"])
         files = {role: root / name for role, name in spec["files"].items()}
@@ -85,6 +101,11 @@ def build_public_dataset(profile, output: Path, *, authorized_sources=False):
             }:
                 raise ValueError("Hateful Memes requires the Phase 2 unseen divisions")
             loaded, exclusions = read_hateful_memes(files, root)
+        elif kind in {"hifox", "cadd"}:
+            if set(files) != {"train", "val", "test"}:
+                raise ValueError(f"{kind} requires its three labeled splits")
+            reader = read_hifox if kind == "hifox" else read_cadd
+            loaded, exclusions = reader(files)
         else:
             raise ValueError(f"Unknown public dataset source {kind!r}")
         if not loaded:

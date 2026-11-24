@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from experiments.compare_context import compare
+from experiments.compare_language_policy import choose_threshold, rates_at
 from experiments.evaluate_public_baseline import (
     analyze_errors,
     evaluate_ablations,
@@ -8,7 +10,8 @@ from experiments.evaluate_public_baseline import (
     fit_feature_ablations,
     measure_faithfulness,
 )
-from hatexai.utils import write_jsonl
+from hatexai.data.public_sources import file_digest
+from hatexai.utils import write_json, write_jsonl
 from hatexai.xai.faithfulness import sufficiency
 
 
@@ -77,3 +80,29 @@ def test_feature_ablations_report_each_fixed_variant_on_holdout(tmp_path):
     for row in report["rows"]:
         assert row["test_f1_macro"] == 1
         assert 0 <= row["test_ece"] <= 1
+
+
+def test_context_comparison_scores_identical_holdout_rows(tmp_path):
+    rows = [
+        {"text": "Community picnic", "context": "Town hall agenda", "label": 0},
+        {"text": "Sports schedule", "context": "Sports discussion", "label": 1},
+    ]
+    manifest = {"splits": {}}
+    for split in ("train", "val", "test"):
+        path = tmp_path / f"{split}.jsonl"
+        write_jsonl(path, rows)
+        manifest["splits"][split] = {"sha256": file_digest(path)}
+    write_json(tmp_path / "manifest.json", manifest)
+    result = compare(tmp_path, tmp_path / "report.json")
+    assert {row["n"] for row in result["test"].values()} == {2}
+    assert set(result["test"]) == {"comment_only", "comment_and_parent"}
+
+
+def test_threshold_search_can_reduce_the_gap_without_sacrificing_recall():
+    labels = np.array([0, 1, 0, 1])
+    scores = np.array([0.1, 0.8, 0.51, 0.85])
+    languages = np.array(["en", "en", "hi-en", "hi-en"])
+    threshold = choose_threshold(labels, scores, languages)
+    comparison = rates_at(labels, scores, languages, threshold)
+    assert comparison["fpr_gap"] == 0
+    assert all(group["false_negative_rate"] == 0 for group in comparison["by_cohort"].values())

@@ -70,7 +70,7 @@ def isolate_splits(rows, seed):
         left, right = sorted((root(left), root(right)))
         parents[right] = left
 
-    text_index, image_index, tweet_index, hashes = {}, {}, {}, {}
+    text_index, image_index, tweet_index, context_index, hashes = {}, {}, {}, {}, {}
     texts = [canonical_text(row["text"]) for row in rows]
     matches = Counter()
     for index, (row, canonical) in enumerate(zip(rows, texts)):
@@ -80,6 +80,9 @@ def isolate_splits(rows, seed):
         else:
             text_index[canonical] = index
         provenance = row["provenance"]
+        if provenance["dataset"] == "cadd" and row["context"]:
+            context = canonical_text(row["context"])
+            link(index, context_index.setdefault(context, index))
         tweet_id = provenance.get("tweet_id")
         if tweet_id:
             link(index, tweet_index.setdefault(tweet_id, index))

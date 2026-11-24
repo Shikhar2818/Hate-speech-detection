@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from hatexai.data.public_pipeline import build_public_dataset
-from hatexai.data.public_sources import file_digest, read_hasoc, read_hatexplain, record
+from hatexai.data.public_sources import file_digest, read_cadd, read_hasoc, read_hatexplain, read_hifox, record
 from hatexai.data.public_splits import image_matches, isolate_splits, text_matches
 from hatexai.utils import read_jsonl, write_json, write_jsonl
 
@@ -34,6 +34,25 @@ def test_hatexplain_majority_before_mapping_and_raw_rationales(tmp_path):
     with pytest.raises(ValueError, match="repeated"):
         read_hatexplain({dataset.name: dataset, divisions.name: divisions})
 
+
+def test_hifox_uses_hate_label_and_marks_romanized_code_mixing(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("Id,Tweet,Hate,Fake\n1,aaj nice weather,0,1\n", encoding="utf-8")
+    [row], _ = read_hifox({"train": path})
+    assert (row["label"], row["language"], row["code_mixed"]) == (0, "hi-en", True)
+
+
+def test_cadd_keeps_parent_context_in_one_split(tmp_path):
+    train, test = tmp_path / "train.json", tmp_path / "test.json"
+    parent = {"title": "Weekend plans", "body": "Discuss local events"}
+    write_json(train, {"a": {**parent, "comment": "Have a good time", "L1": "0"}})
+    write_json(test, {"b": {**parent, "comment": "Different comment", "L1": "1"}})
+    rows, _ = read_cadd({"train": train, "test": test})
+    assert rows[0]["context"] == "Weekend plans\nDiscuss local events"
+    assert [row["label"] for row in rows] == [0, 1]
+    splits, _, _ = isolate_splits(rows, 42)
+    assert not splits["train"]
+    assert splits["test"][0]["id"] == "cadd:b"
 
 def test_hasoc_fine_labels_language_and_coarse_only_exclusion(tmp_path):
     path = tmp_path / "test.tsv"

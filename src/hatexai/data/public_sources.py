@@ -21,6 +21,8 @@ HATEXPLAIN_FILES = {
 }
 HATEXPLAIN_LABELS = {"hatespeech": 1, "offensive": 0, "normal": 0}
 HASOC_LABELS = {"HATE": 1, "OFFN": 0, "PRFN": 0}
+CADD_REVISION = "090f41c26976b2f763ff445cd6d5840d42a4ddeb"
+HIFOX_REVISION = "420bcd5a129be5c9ecf362a0579aafdef30fdc01"
 
 
 def file_digest(path: Path) -> str:
@@ -123,6 +125,37 @@ def read_hasoc(files, language):
                     task_1=coarse, source_label=fine or coarse, tweet_id=item.get("tweet_id"),
                 ))
     return rows, excluded
+
+
+def read_hifox(files):
+    rows = []
+    for split, path in files.items():
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            for item in csv.DictReader(handle):
+                label = item["Hate"]
+                if label not in {"0", "1"}:
+                    raise ValueError(f"Unexpected HiFoX hate label {label!r}")
+                row = record("hifox", item["Id"], split, item["Tweet"], int(label), "hi-en",
+                             source_label=label)
+                row["code_mixed"] = True
+                row["provenance"]["code_mix_evidence"] = "dataset scope"
+                rows.append(row)
+    return rows, Counter()
+
+
+def read_cadd(files):
+    rows = []
+    for split, path in files.items():
+        for source_id, item in load_json(path).items():
+            label = int(item["L1"])
+            if label not in {0, 1, 2, 3}:
+                raise ValueError(f"Unexpected CADD L1 label {label!r}")
+            row = record("cadd", source_id, split, item["comment"], int(label == 1), "en",
+                         source_label=label, target=item.get("L4"))
+            row["context"] = "\n".join(value.strip() for value in (item["title"], item["body"])
+                                        if value and value.strip())
+            rows.append(row)
+    return rows, Counter()
 
 
 def read_hateful_memes(files, image_root):
