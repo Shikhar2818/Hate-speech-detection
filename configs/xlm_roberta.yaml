@@ -1,0 +1,49 @@
+seed: 42
+output_dir: outputs/english-hinglish-v3
+device: auto
+model_version: linear-en-hi-en-v3
+benchmark_name: HateXplain + HiFoX
+benchmark_languages: [English, Hinglish]
+meme_output_dir: outputs/meme-pilot-v1
+meme_encoder_dir: outputs/encoders/tinyclip
+data:
+  manifest_path: data/processed/english-hinglish-v2/manifest.json
+  train_path: data/processed/english-hinglish-v2/train.jsonl
+  val_path: data/processed/english-hinglish-v2/val.jsonl
+  test_path: data/processed/english-hinglish-v2/test.jsonl
+baseline:
+  char_ngram_range: [3, 5]
+transformer:
+  base_model: xlm-roberta-base
+  checkpoint: outputs/xlm-roberta-bilingual/checkpoints/classifier
+  evaluation_dir: outputs/xlm-roberta-bilingual/eval
+  model_version: xlmr-bilingual-v1
+  enabled: true
+  max_length: 128
+  batch_size: 8
+  epochs: 3
+  learning_rate: 0.00003
+  weight_decay: 0.01
+  train_encoder_layers: 4
+  early_stopping_patience: 2
+xai:
+  ig_steps: 16
+  shap_evals: 65
+  top_k_tokens: 8
+explanation_policy:
+  base_model: google/flan-t5-small
+  base_checkpoint: outputs/encoders/flan-t5-small
+  optimized_checkpoint: outputs/xlm-roberta-bilingual/checkpoints/dpo_policy
+  enabled: true
+dpo:
+  policy_model: outputs/encoders/flan-t5-small
+  require_prompt: true
+  preferences_path: data/processed/dpo/reviewed_train.jsonl
+  evaluation_path: data/processed/dpo/reviewed_test.jsonl
+  output_dir: outputs/xlm-roberta-bilingual
+  beta: 0.1
+  epochs: 2
+  batch_size: 2
+  learning_rate: 0.00005
+  max_source_length: 384
+  max_target_length: 96

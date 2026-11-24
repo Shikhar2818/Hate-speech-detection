@@ -7,9 +7,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 class ExplanationPolicy:
     """Seq2seq LLM that generates a label plus a natural-language rationale."""
 
-    def __init__(self, model_name: str, device: torch.device):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+    def __init__(self, model_name: str, device: torch.device, *, local_only: bool = False):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=local_only)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name, local_files_only=local_only).to(device).eval()
         self.device = device
 
     def prompt_for(self, text: str, context: str = "") -> str:
@@ -33,6 +33,31 @@ class ExplanationPolicy:
 
     def trainable_parameters(self):
         return self.model.parameters()
+
+    @staticmethod
+    def evidence_prompt(text, context, label, confidence, decision, evidence):
+        return (
+            f"Explain the classifier's prediction using only the listed evidence. "
+            f"Class: {label}. Confidence: {confidence:.1%}. Moderation: {decision}. "
+            f"Evidence: {', '.join(evidence)}. Context: {context or '(none)'}. Post: {text}"
+        )
+
+    @torch.inference_mode()
+    def grounded_rationale(self, text, context, label, confidence, decision, evidence):
+        if not evidence:
+            return None
+        source = self.evidence_prompt(text, context, label, confidence, decision, evidence)
+        # Score grounded alternatives with Flan-T5. All quoted evidence comes from
+        # the attributed input and no completion can assert author intent.
+        verdict = {"hate": "Hate", "non_hate": "Non-hate", "needs_review": "Needs review"}.get(decision, label)
+        options = [
+            f"The moderation result is {verdict}. The highlighted token “{token}” influenced the classifier score."
+            for token in evidence[:3]
+        ]
+        if decision == "needs_review" or confidence < 0.65:
+            options = [option + " A reviewer can assess the meaning in context." for option in options]
+        totals, counts = completion_logprobs(self, [source] * len(options), options)
+        return options[int((totals / counts.clamp_min(1)).argmax())]
 
 
 def completion_logprobs(policy, sources, targets, *, max_source_length=384, max_target_length=128):

@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from hatexai.reward.dpo import dpo_loss
-from hatexai.train.train_dpo import _sequence_logprob, load_reviewed_preferences, train_dpo
+from hatexai.train.train_dpo import _sequence_logprob, load_reviewed_preferences, train_dpo, verify_preference_isolation
 from hatexai.utils import write_json, write_jsonl
 
 
@@ -100,6 +100,21 @@ def test_dpo_loss_prefers_higher_policy_margin():
     worse = dpo_loss(torch.tensor([-1.0]), torch.tensor([1.0]), ref, ref, beta=0.5)
     assert better < worse
     assert float(better) >= 0.0
+
+
+def test_grounded_preferences_require_prompt_and_disjoint_posts(tmp_path):
+    path = tmp_path / "pairs.jsonl"
+    row = {"id": "1", "text": "An example social media post for duplicate checks",
+           "chosen_explanation": "Chosen", "rejected_explanation": "Rejected",
+           "review_status": "accepted", "reviewer_id": "fixture"}
+    write_jsonl(path, [row])
+    with pytest.raises(ValueError, match="classifier-evidence prompt"):
+        load_reviewed_preferences(path, require_prompt=True)
+    write_jsonl(path, [{**row, "prompt": "A reviewed prompt"}])
+    [train] = load_reviewed_preferences(path, require_prompt=True)
+    assert train["prompt"] == "A reviewed prompt"
+    with pytest.raises(ValueError, match="near-duplicate"):
+        verify_preference_isolation([train], [{**train, "id": "2", "text": train["text"] + "."}])
 
 
 def test_dpo_smoke_updates_policy_and_saves_training_record(tmp_path, monkeypatch):

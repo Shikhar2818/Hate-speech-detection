@@ -19,7 +19,8 @@ from hatexai.utils import load_config, maybe_set_hf_offline, read_jsonl, write_j
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train hate speech detection pipeline")
     parser.add_argument("--config", default=str(ROOT / "configs" / "default.yaml"))
-    parser.add_argument("--stage", choices=["baseline", "classifier", "dpo", "all"], default="baseline")
+    parser.add_argument("--stage", choices=["baseline", "classifier", "transformer", "dpo", "dpo-eval", "all"],
+                        default="baseline")
     return parser.parse_args()
 
 
@@ -119,10 +120,25 @@ def main() -> None:
         from hatexai.train.train_classifier import train_classifier
 
         train_classifier(config)
+    if args.stage == "transformer":
+        from hatexai.train.train_transformer import train_transformer
+
+        manifest = load_json(Path(config["data"]["manifest_path"]))
+        for split in ("train", "val"):
+            verify_benchmark_split(config, manifest, split)
+        train_transformer(config)
+        return
     if args.stage in {"dpo", "all"}:
         from hatexai.train.train_dpo import train_dpo
 
         train_dpo(config)
+        if args.stage == "dpo":
+            return
+    if args.stage == "dpo-eval":
+        from hatexai.train.train_dpo import evaluate_dpo
+
+        evaluate_dpo(config)
+        return
     out = Path(config["output_dir"]) / "eval" / "pipeline_summary.json"
     write_json(out, results)
 
