@@ -262,7 +262,7 @@ def create_app() -> FastAPI:
                 out["missing"].append(key)
                 continue
             artifact = json.loads(path.read_text(encoding="utf-8"))
-            if public_benchmark and key in {"faithfulness", "error_analysis"} and (
+            if public_benchmark and key in {"ablation", "faithfulness", "error_analysis"} and (
                 not training or artifact.get("checkpoint_sha256") != training.get("checkpoint_sha256")
                 or artifact.get("test_sha256") != training.get("dataset_splits", {}).get("test", {}).get("sha256")
             ):

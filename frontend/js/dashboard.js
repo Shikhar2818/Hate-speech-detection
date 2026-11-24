@@ -159,13 +159,15 @@ function renderAblation(ablation) {
     body.append(el("tr", {}, [el("td", { colspan: "8", text: "No ablation artifact." })]));
     return;
   }
+  const heldOutF1 = ablation.rows.some((row) => typeof row.test_f1_macro === "number");
+  $("#ablation-f1-label").textContent = heldOutF1 ? "Test macro-F1" : "CV macro-F1";
   ablation.rows.forEach((r) => {
     const selected = ablation.selected && r.feature_set === ablation.selected.feature_set && r.calibrated === ablation.selected.calibrate;
     body.append(
       el("tr", { style: selected ? "background: rgba(139,124,246,.12)" : "" }, [
         el("td", {}, [el("span", { text: r.feature_set }), selected ? el("span", { class: "pill ok", style: "margin-left:8px", text: "selected" }) : document.createTextNode("")]),
         el("td", { text: r.calibrated ? "yes" : "no" }),
-        el("td", { class: "num", text: r.cv_f1_macro_train === null ? "n/a" : num(r.cv_f1_macro_train, 3) }),
+        el("td", { class: "num", text: num(heldOutF1 ? r.test_f1_macro : r.cv_f1_macro_train, 3) }),
         el("td", { class: "num", text: num(r.test_accuracy, 3) }),
         el("td", { class: "num", text: num(r.test_brier, 3) }),
         el("td", { class: "num", text: num(r.test_ece, 3) }),

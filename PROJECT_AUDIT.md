@@ -46,6 +46,11 @@ probability drop after removing the five selected tokens was 0.096 versus 0.031 
 deletion. Mean retained probability was 0.832 versus 0.757. These are perturbation measurements
 for this checkpoint and do not assess generated rationales or intent.
 
+The fixed public feature ablation produced test macro F1 of 0.723 for character features, 0.792
+for word features, 0.793 for their uncalibrated union, and 0.792 for the calibrated union. The
+group-calibrated ensemble reduced ECE from 0.104 to 0.020. The experiment compares the full
+calibration procedure, which also changes the estimator from a single fit to a fold ensemble.
+
 ## DPO validation update (2026-11-24)
 
 The historical recommendation in section 3.2 misidentified the T5 alignment. Passing `labels` to T5
