@@ -8,6 +8,8 @@ meme_output_dir: outputs/meme-pilot-v1
 meme_encoder_dir: outputs/encoders/tinyclip
 baseline:
   char_ngram_range: [3, 5]
+transformer:
+  profile: outputs/xlmr-cpu-pilot/config.yaml
 data:
   manifest_path: data/processed/english-hinglish-v2/manifest.json
   train_path: data/processed/english-hinglish-v2/train.jsonl

@@ -28,6 +28,8 @@ _lock = RLock()
 _service: Any | None = None
 _baseline: Any | None = None
 _baseline_config: dict | None = None
+_transformer: Any | None = None
+_transformer_config: dict | None = None
 _config: dict[str, Any] | None = None
 
 
@@ -48,12 +50,12 @@ def get_service():
             settings = config.get("transformer", {})
             if settings.get("enabled"):
                 try:
-                    _service = load_transformer(config, settings)
+                    _service = get_transformer_service()
                 except (OSError, ValueError, RuntimeError, KeyError, StopIteration) as exc:
                     logging.getLogger(__name__).warning("XLM-R unavailable; using baseline: %s", exc)
             if _service is None:
                 _service = get_baseline_service()
-            load_generator(_service, config)
+                load_generator(_service, config)
         return _service
 
 
@@ -82,6 +84,26 @@ def transformer_report(config):
     return report
 
 
+def transformer_profile(config):
+    profile = config.get("transformer", {}).get("profile")
+    return load_config(profile) if profile else config
+
+
+def get_transformer_service():
+    global _transformer, _transformer_config
+    with _lock:
+        config = get_config()
+        if _transformer is None or _transformer_config is not config:
+            profile = transformer_profile(config)
+            settings = profile["transformer"]
+            if not settings.get("enabled"):
+                raise ValueError("XLM-R is disabled")
+            service = load_transformer(profile, settings)
+            load_generator(service, profile)
+            _transformer, _transformer_config = service, config
+        return _transformer
+
+
 def load_transformer(config, settings):
     from hatexai.inference import TransformerHateService
     from hatexai.models.xlm_roberta import XLMClassifier
@@ -94,7 +116,9 @@ def load_transformer(config, settings):
         raise ValueError("Invalid validation-selected decision bounds")
     model = XLMClassifier(settings["checkpoint"], resolve_device(config.get("device", "auto")),
                           settings["max_length"], settings["batch_size"])
-    return TransformerHateService(model, bounds, config.get("xai", {}))
+    service = TransformerHateService(model, bounds, config.get("xai", {}))
+    service.model_version = settings.get("model_version", "xlm-roberta")
+    return service
 
 
 def load_generator(service, config):
@@ -120,6 +144,6 @@ def load_generator(service, config):
 
 def reset_service() -> None:
     """Test hook: drop the cached model so the next call reloads it."""
-    global _service, _baseline
+    global _service, _baseline, _transformer
     with _lock:
-        _service = _baseline = None
+        _service = _baseline = _transformer = None

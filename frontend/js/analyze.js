@@ -11,10 +11,15 @@ const EXAMPLES = [
 
 const state = { operating: null, last: null, pending: null, memeEnabled: false };
 
+function operatingPoint(result) {
+  const bounds = result.model?.decision_bounds;
+  return Array.isArray(bounds) ? { low: bounds[0], high: bounds[1] } : state.operating;
+}
+
 function threeWayVerdict(result) {
   if (result.decision) return result.decision === "needs_review" ? "review" : result.decision;
   const p = result.probability_hate;
-  const op = state.operating;
+  const op = operatingPoint(result);
   if (op && typeof op.low === "number" && typeof op.high === "number") {
     if (p >= op.high) return "hate";
     if (p <= op.low) return "non_hate";
@@ -84,8 +89,9 @@ function renderResult(result, input) {
     el("span", { class: "prob-value", text: pct(result.probability_hate) }),
   ]));
   requestAnimationFrame(() => (fill.style.width = pct(result.probability_hate)));
-  if (state.operating) {
-    const { low, high } = state.operating;
+  const op = operatingPoint(result);
+  if (op) {
+    const { low, high } = op;
     bars.append(el("p", { class: "muted small",
       text: `Scores at or above ${pct(high)} flag Hate. Scores at or below ${pct(low)} show Non-hate. Scores in between go to review.` }));
   }
@@ -169,7 +175,7 @@ async function analyze(event) {
     return;
   }
 
-  const input = { text, context, method };
+  const input = { text, context, method, classifier: $("#classifier").value };
   state.pending = input;
   state.last = null;
   $("#report-btn").classList.add("hidden");
@@ -235,6 +241,17 @@ async function validateImage(event) {
 
 document.addEventListener("DOMContentLoaded", async () => {
   const textarea = $("#post-text");
+  const classifier = $("#classifier");
+  const methodNames = { integrated_gradients: "Integrated Gradients", shap: "SHAP",
+    lime: "LIME (local surrogate)", occlusion: "Occlusion (token removal)" };
+  let primaryMethods = ["lime", "occlusion"];
+  let researchMethods = [];
+  function updateMethods() {
+    const methods = classifier.value === "transformer" ? researchMethods : primaryMethods;
+    const select = clear($("#method"));
+    select.append(...methods.map((method) => el("option", { value: method, text: methodNames[method] })));
+  }
+  classifier.addEventListener("change", updateMethods);
   const counter = $("#char-counter");
   const showCounter = (len) => {
     counter.textContent = `${len} / 5000`;
@@ -270,6 +287,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#analyze-form").addEventListener("submit", analyze);
   $("#analyze-form").addEventListener("reset", () => {
+    classifier.value = "primary";
+    updateMethods();
     state.pending = null;
     state.last = null;
     setAnalyzing(false);
@@ -310,13 +329,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       : "The demo profile uses a small synthetic dataset.";
     const checkpoint = info.active_classifier?.classifier || "Classifier unavailable";
     $("#analysis-scope").textContent = `${checkpoint}. ${info.evaluation?.scope || scope}`;
-    const methodNames = { integrated_gradients: "Integrated Gradients", shap: "SHAP",
-      lime: "LIME (local surrogate)", occlusion: "Occlusion (token removal)" };
-    if (info.explanation_methods.length) {
-      const select = clear($("#method"));
-      select.append(...info.explanation_methods.map((method) =>
-        el("option", { value: method, text: methodNames[method] || method })));
-    }
+    if (info.explanation_methods.length) primaryMethods = info.explanation_methods;
+    researchMethods = info.research_classifier?.methods || [];
+    $("#classifier-field").hidden = !researchMethods.length;
+    updateMethods();
     if (info.modalities.image) {
       state.memeEnabled = true;
       $("#image-heading").textContent = "Analyze an English meme (research pilot)";

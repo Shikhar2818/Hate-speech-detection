@@ -59,8 +59,8 @@ python scripts/run_pipeline.py --config outputs/xlmr-cpu-pilot/config.yaml --sta
 python experiments/compare_transformer.py --config outputs/xlmr-cpu-pilot/config.yaml
 python experiments/evaluate_transformer_xai.py --config outputs/xlmr-cpu-pilot/config.yaml
 python experiments/compare_transformer.py --config outputs/xlmr-cpu-pilot/config.yaml --context-manifest data/processed/cadd-v1/manifest.json
-$env:HATEXAI_CONFIG = "outputs/xlmr-cpu-pilot/config.yaml"
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8002
+$env:HATEXAI_CONFIG = "configs/english_hinglish_ngrams.yaml"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
 ```
 
 For the full 46,662-row training set, use `configs/xlm_roberta.yaml` for training, comparison
@@ -70,13 +70,18 @@ to 12 to fine-tune the whole encoder. CUDA requires a CUDA-enabled PyTorch build
 size and sequence length to available VRAM. CPU runs use host RAM and are substantially slower
 on the full corpus. Allow a few GB of disk space for pretrained and saved weights.
 
+Open [Analyze](http://127.0.0.1:8001/analyze.html) for the presentation. TF-IDF is selected by default.
+Choose **XLM-RoBERTa (research pilot)** in the Model menu to see Integrated Gradients, SHAP,
+and Flan-T5 on the same page. Both comparison rows are available on the dashboard.
+
 The app loads a saved classifier and its validation-selected cutoffs. An absent or invalid
 XLM-R checkpoint or evaluation triggers the configured TF-IDF fallback. The profile identifies
 the loaded classifier and available methods in `GET /api/model-info`. Set `classifier: "baseline"`
-in prediction or explanation requests to compare with TF-IDF. For example:
+in prediction or explanation requests to compare with TF-IDF. Use `classifier: "transformer"`
+to select the research checkpoint explicitly. For example:
 
 ```json
-{"text":"Aaj library open hai. Everyone is welcome.","context":"","method":"integrated_gradients"}
+{"text":"Aaj library open hai. Everyone is welcome.","classifier":"transformer","method":"integrated_gradients"}
 ```
 
 Submit that body to `POST /api/explain`. XLM-R also supports `shap`, with more forward passes

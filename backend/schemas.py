@@ -16,7 +16,7 @@ ExplanationMethod = Literal["lime", "occlusion", "integrated_gradients", "shap"]
 class PredictRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=MAX_TEXT_CHARS)
     context: str = Field("", max_length=MAX_CONTEXT_CHARS)
-    classifier: Literal["primary", "baseline"] = "primary"
+    classifier: Literal["primary", "baseline", "transformer"] = "primary"
 
     @field_validator("text")
     @classmethod

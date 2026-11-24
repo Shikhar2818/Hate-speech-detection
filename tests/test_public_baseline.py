@@ -77,15 +77,20 @@ def test_missing_transformer_falls_back_and_reports_real_model(benchmark_config,
 
 def test_transformer_comparison_writes_same_split_metrics(benchmark_config, tmp_path, monkeypatch):
     from experiments import compare_transformer
+    from hatexai.models import xlm_roberta
     from hatexai.utils import ensure_dir
 
     run_public_baseline(benchmark_config)
+    presentation = {**benchmark_config, "model_version": "main-tfidf"}
     manifest_path = Path(benchmark_config["data"]["manifest_path"])
     checkpoint = ensure_dir(tmp_path / "transformer")
-    write_json(checkpoint / "training.json", {"manifest_sha256": file_digest(manifest_path)})
+    write_json(checkpoint / "training.json", {
+        "manifest_sha256": file_digest(manifest_path), "settings": {"max_length": 16},
+    })
+    write_json(checkpoint / "config.json", {})
     benchmark_config.update(device="cpu", transformer={
         "checkpoint": str(checkpoint), "evaluation_dir": str(tmp_path / "reports"),
-        "max_length": 16, "batch_size": 4,
+        "max_length": 16, "batch_size": 4, "model_version": "research-xlmr", "enabled": True,
     })
 
     class TransformerFixture:
@@ -103,6 +108,24 @@ def test_transformer_comparison_writes_same_split_metrics(benchmark_config, tmp_
     assert all(model["metrics"]["by_language"]["en"]["n"] == 24 for model in report["systems"])
     assert (tmp_path / "reports" / "transformer_comparison.md").is_file()
     assert load_json(tmp_path / "reports" / "transformer_comparison.json") == report
+
+    profile = tmp_path / "pilot.yaml"
+    write_json(profile, benchmark_config)
+    presentation["transformer"] = {"profile": str(profile)}
+    monkeypatch.setattr(registry, "_config", presentation)
+    monkeypatch.setattr(registry, "_service", None)
+    monkeypatch.setattr(registry, "_transformer", None)
+    monkeypatch.setattr(xlm_roberta, "XLMClassifier", TransformerFixture)
+    with TestClient(create_app()) as client:
+        info = client.get("/api/model-info").json()
+        assert info["active_classifier"]["version"] == "main-tfidf"
+        assert "integrated_gradients" in info["research_classifier"]["methods"]
+        assert client.get("/api/evaluation").json()["available"]["transformer_comparison"] == report
+        primary = client.post("/api/predict", json={"text": "blue sky"}).json()
+        research = client.post("/api/predict", json={"text": "blue sky", "classifier": "transformer"}).json()
+        assert primary["model"]["version"] == "main-tfidf"
+        assert research["model"]["version"] == "research-xlmr"
+        assert client.get("/health").json()["model_version"] == "main-tfidf"
 
 
 def test_benchmark_checkpoint_policy_and_analytics_are_served(benchmark_config, tmp_path, monkeypatch):

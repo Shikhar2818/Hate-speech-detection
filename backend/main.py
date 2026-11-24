@@ -14,8 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.registry import (
-    MODEL_VERSION, PROJECT_ROOT, get_baseline_service, get_config, get_service, transformer_report,
+    MODEL_VERSION, PROJECT_ROOT, get_baseline_service, get_config, get_service,
+    get_transformer_service, transformer_profile, transformer_report,
 )
+from hatexai.inference import TransformerHateService
 from backend.schemas import (
     ExplainRequest,
     ExplainResponse,
@@ -71,13 +73,24 @@ def _evaluation_dir() -> Path:
 def _model_version(service=None) -> str:
     config = get_config()
     if service is not None and service.model_type == "xlm-roberta":
-        return config["transformer"]["model_version"]
+        return service.model_version
     return config.get("model_version", MODEL_VERSION)
 
 
 def _prediction_model(service):
     return {"name": "HateXAI", "classifier": service.model_name, "version": _model_version(service),
             "type": service.model_type, "decision_bounds": service.decision_bounds}
+
+
+def _request_service(classifier):
+    if classifier == "baseline":
+        return get_baseline_service()
+    if classifier == "transformer":
+        try:
+            return get_transformer_service()
+        except (OSError, KeyError, ValueError, RuntimeError, StopIteration) as exc:
+            raise HTTPException(status_code=503, detail="XLM-RoBERTa checkpoint is unavailable.") from exc
+    return get_service()
 
 
 def _meme_output(config: dict[str, Any]) -> Path | None:
@@ -134,6 +147,17 @@ def _model_info() -> dict[str, Any]:
     except (OSError, RuntimeError, ValueError, KeyError):
         service = None
     model = _prediction_model(service) if service is not None else None
+    research = None
+    if service is not None and config.get("transformer", {}).get("profile"):
+        try:
+            profile = transformer_profile(config)
+            settings = profile["transformer"]
+            if settings.get("enabled") and (Path(settings["checkpoint"]) / "config.json").is_file():
+                transformer_report(profile)
+                research = {"name": "XLM-RoBERTa (research pilot)",
+                            "methods": list(TransformerHateService.methods)}
+        except (OSError, KeyError, ValueError):
+            pass
     benchmark = config.get("benchmark_name")
     languages = config.get("benchmark_languages", ["English"] if benchmark else [])
     meme_available = _meme_output(config) is not None
@@ -154,10 +178,12 @@ def _model_info() -> dict[str, Any]:
         "name": "HateXAI",
         "version": _model_version(service),
         "active_classifier": model,
+        "research_classifier": research,
         "checkpoint_loaded": service is not None,
         "explanation_policy": service.generator_status if service is not None else "unavailable",
         "transformer_status": (
             "loaded" if model and model["type"] == "xlm-roberta"
+            else "available for selection" if research
             else "baseline fallback" if config.get("transformer", {}).get("enabled") else "not configured"
         ),
         "architecture": {
@@ -248,8 +274,10 @@ def create_app() -> FastAPI:
         # Model loading happens inside the try so a failed/absent checkpoint
         # returns a clean 500 rather than an unhandled server error.
         try:
-            service = get_baseline_service() if payload.classifier == "baseline" else get_service()
+            service = _request_service(payload.classifier)
             result = service.predict(payload.text, payload.context)
+        except HTTPException:
+            raise
         except Exception as exc:  # noqa: BLE001 - surface a clean error, log details server-side
             print(f"[predict] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Inference failed. The model may be unavailable.") from exc
@@ -260,7 +288,7 @@ def create_app() -> FastAPI:
     @app.post("/api/explain", response_model=ExplainResponse, dependencies=[Depends(rate_limit)])
     def explain(payload: ExplainRequest) -> dict[str, Any]:
         try:
-            service = get_baseline_service() if payload.classifier == "baseline" else get_service()
+            service = _request_service(payload.classifier)
             if payload.method not in service.methods:
                 raise HTTPException(status_code=422, detail=f"Method unavailable for {service.model_name}")
             result = service.analyze(payload.text, payload.context, method=payload.method)
@@ -344,7 +372,7 @@ def create_app() -> FastAPI:
             out["available"][key] = artifact
         if "transformer" in get_config():
             try:
-                config = get_config()
+                config = transformer_profile(get_config())
                 report = transformer_report(config)
                 out["available"]["transformer_comparison"] = report
                 path = Path(config["transformer"]["evaluation_dir"]) / "transformer_xai.json"

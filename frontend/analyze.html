@@ -44,6 +44,14 @@
         <label for="post-context" style="margin-top:16px">Context (optional)</label>
         <input id="post-context" type="text" maxlength="2000" placeholder="Reply thread, page, or event" />
 
+        <div id="classifier-field" hidden>
+          <label for="classifier" style="margin-top:16px">Model</label>
+          <select id="classifier">
+            <option value="primary">TF-IDF (recommended)</option>
+            <option value="transformer">XLM-RoBERTa (research pilot)</option>
+          </select>
+        </div>
+
         <label for="method" style="margin-top:16px">Explanation method</label>
         <select id="method">
           <option value="lime">LIME (local surrogate)</option>

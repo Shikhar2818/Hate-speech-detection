@@ -13,8 +13,9 @@ Validation selected the checkpoint and moderation thresholds. The full-corpus ru
 | TF-IDF + logistic regression | 0.661 | 0.617 | 0.519 | 0.605 | 0.710 | 0.050 |
 | XLM-RoBERTa-base | 0.582 | 0.581 | 0.616 | 0.509 | 0.697 | 0.209 |
 
-The existing full-data TF-IDF app remains on port 8001. The opt-in XLM-R pilot runs on port
-8002. The pilot API served both checkpoints, LIME, occlusion, Integrated Gradients and SHAP.
+The full-data TF-IDF model and XLM-R pilot are available in one app on port 8001. TF-IDF is the
+default and the Analyze page's Model menu selects the pilot. The API serves both checkpoints,
+LIME, occlusion, Integrated Gradients and SHAP.
 The two new attribution methods preserved the same scores and decisions in live checks.
 The saved classifier is under `outputs/xlmr-cpu-pilot/checkpoints/classifier/`.
 
