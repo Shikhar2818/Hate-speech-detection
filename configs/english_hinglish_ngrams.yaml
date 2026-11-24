@@ -1,0 +1,15 @@
+seed: 42
+output_dir: outputs/english-hinglish-v3
+device: cpu
+model_version: linear-en-hi-en-v3
+benchmark_name: HateXplain + HiFoX
+benchmark_languages: [English, Hinglish]
+meme_output_dir: outputs/meme-pilot-v1
+meme_encoder_dir: outputs/encoders/tinyclip
+baseline:
+  char_ngram_range: [3, 5]
+data:
+  manifest_path: data/processed/english-hinglish-v2/manifest.json
+  train_path: data/processed/english-hinglish-v2/train.jsonl
+  val_path: data/processed/english-hinglish-v2/val.jsonl
+  test_path: data/processed/english-hinglish-v2/test.jsonl

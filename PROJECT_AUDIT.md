@@ -1,14 +1,42 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
-## English and Hinglish decision check
+## Expanded English and Hinglish training
+
+The text training set grew from 23,787 to 46,662 labeled posts. It adds 16,653 CADD training
+comments and 6,222 Hinglish posts after removing 14 duplicates from the supplemental CSV.
+The builder checked exact and near matches against the original splits and verified the validation
+and test files byte for byte. CADD parent text was used to group related comments before fitting
+on comment text alone. The commands and pinned sources are in the README.
+
+| Model | Held-out accuracy | Macro F1 | English macro F1 | Hinglish macro F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Previous checkpoint | 78.37% | 0.761 | 0.782 | 0.732 |
+| Expanded data, original character features | 78.24% | 0.758 | 0.770 | 0.738 |
+| Expanded data, character 3–5-grams | 79.97% | 0.779 | 0.794 | 0.757 |
+
+The final variant improved validation accuracy and macro F1 in both cohorts. The table uses the
+same 3,759 held-out posts and binary classifier predictions. The final variant's separate
+moderation policy reduced false flags from 918 to 771 and reviews from 573 to 534, while
+automatic clears of labeled hate rose from 61 to 65. In the 40 hand-written diagnostics,
+false flags on the 20 non-hate examples fell from nine to one, while automatic clears on the
+16 examples intended as hate rose from seven to 12. The diagnostic results show a remaining gap
+on short and implicit hate.
+
+The final checkpoint is `outputs/english-hinglish-v3/checkpoints/linear_baseline.joblib`.
+The CPU fit and initial validation took about 81 seconds. The model profile is
+`configs/english_hinglish_ngrams.yaml` powers the local bilingual app on port 8001. Metrics, thresholds, training metadata and local
+comparisons are under `outputs/english-hinglish-v3/eval/`. Both explanation methods passed
+the FastAPI check. The complete suite passed 70 tests.
+
+## Previous English and Hinglish decision check
 
 Scored 20 matched English and Hinglish diagnostic pairs and replayed all 40 inputs through both
 explanation methods. The two methods produced identical scores and moderation decisions.
-The active profile flags hate at 24.19% and routes scores above 14.19% and below 24.19% to review.
+The previous profile flags hate at 24.19% and routes scores above 14.19% and below 24.19% to review.
 The diagnostic set exposed missed exclusionary posts and false flags on neutral identity mentions
 and counterspeech. These hand-written examples are troubleshooting cases.
 
-On the checksummed held-out splits, the active review policy cleared 40 of 594 labeled English hate
+On the checksummed held-out splits, that review policy cleared 40 of 594 labeled English hate
 posts and 21 of 806 labeled Hinglish hate posts. It flagged 357 of 1,330 English non-hate posts and
 561 of 1,029 Hinglish non-hate posts. Review outcomes are counted separately in the local diagnostic
 report under `outputs/app-check/bilingual-diagnostics/`. The Analyze page now displays a single

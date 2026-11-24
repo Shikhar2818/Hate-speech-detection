@@ -51,7 +51,10 @@ def _make_classifier() -> LogisticRegression:
     return LogisticRegression(max_iter=3000, class_weight="balanced")
 
 
-def build_linear_pipeline(feature_set: str = "union", calibrate: bool = False, cv=3):
+def build_linear_pipeline(
+    feature_set: str = "union", calibrate: bool = False, cv=3,
+    char_ngram_range: tuple[int, int] = (1, 2),
+):
     """Build the baseline pipeline.
 
     ``calibrate`` wraps the pipeline in Platt (sigmoid) scaling fitted by
@@ -61,7 +64,8 @@ def build_linear_pipeline(feature_set: str = "union", calibrate: bool = False, c
     if feature_set == "char":
         base = Pipeline(
             steps=[
-                ("tfidf", TfidfVectorizer(ngram_range=(1, 2), min_df=1, max_features=30000, analyzer="char_wb")),
+                ("tfidf", TfidfVectorizer(ngram_range=char_ngram_range, min_df=1, max_features=30000,
+                                          analyzer="char_wb")),
                 ("clf", _make_classifier()),
             ]
         )
@@ -80,7 +84,8 @@ def build_linear_pipeline(feature_set: str = "union", calibrate: bool = False, c
                     FeatureUnion(
                         [
                             ("word", TfidfVectorizer(ngram_range=(1, 2), min_df=1, sublinear_tf=True)),
-                            ("char", TfidfVectorizer(ngram_range=(1, 2), min_df=1, analyzer="char_wb", sublinear_tf=True)),
+                            ("char", TfidfVectorizer(ngram_range=char_ngram_range, min_df=1,
+                                                     analyzer="char_wb", sublinear_tf=True)),
                         ]
                     ),
                 ),
@@ -101,6 +106,7 @@ def baseline_settings(config: dict[str, Any]) -> dict[str, Any]:
         "feature_set": baseline_cfg.get("feature_set", "union"),
         "calibrate": bool(baseline_cfg.get("calibrate", True)),
         "calibration_cv": int(baseline_cfg.get("calibration_cv", 3)),
+        "char_ngram_range": tuple(baseline_cfg.get("char_ngram_range", (1, 2))),
     }
 
 
@@ -118,6 +124,7 @@ def train_linear_baseline(config: dict[str, Any]):
         feature_set=settings["feature_set"],
         calibrate=settings["calibrate"],
         cv=cv,
+        char_ngram_range=settings["char_ngram_range"],
     )
     model.fit(texts, labels)
 

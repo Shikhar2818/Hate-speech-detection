@@ -58,6 +58,24 @@ python experiments/compare_context.py
 python experiments/compare_language_policy.py
 ```
 
+The expanded training experiment adds the CADD training comments and the Hinglish rows from
+[Srivastava et al.](https://doi.org/10.1007/978-981-16-3067-5_8). Save the authors'
+[pinned CSV](https://github.com/bhargavyagnik/Hateful_speech_Hinglish_social_media_Paper/blob/c7e831de82ae5894dced27ad66aa840b7735ca3e/Hate_speech_dataset.csv)
+under `data/raw/hinglish-yagnik/`. The authors specify research use. The dataset builder
+checks input digests, removes training overlap, and copies the original validation and test
+files byte for byte. The experiment runs on CPU and produces a separate checkpoint.
+
+```powershell
+python scripts/extend_public_training.py --reference data/processed/english-hinglish-v1 --extra data/processed/cadd-v1 --hinglish data/raw/hinglish-yagnik/Hate_speech_dataset.csv --output data/processed/english-hinglish-v2
+$env:OPENBLAS_NUM_THREADS = "2"
+$env:OMP_NUM_THREADS = "2"
+python scripts/run_pipeline.py --config configs/english_hinglish_extended.yaml --stage baseline
+python scripts/run_pipeline.py --config configs/english_hinglish_ngrams.yaml --stage baseline
+```
+
+The second run uses the same data with character 3–5-grams. Both write their own training
+metadata, validation metrics, held-out metrics, and review cutoffs under `outputs/`.
+
 For the meme pilot, save the pinned [Multi3Hate Parquet file](https://huggingface.co/datasets/MinhDucBui/Multi3Hate/tree/e3692a908ade3952bd70bb0cc1ca5eac8b23663c/data)
 as `data/raw/multi3hate/memes.parquet`. Its CC BY-NC-ND terms apply. Keep this pilot local for
 noncommercial research. Save `config.json`, `preprocessor_config.json` and `pytorch_model.bin` from
@@ -66,13 +84,14 @@ under `outputs/encoders/tinyclip/`.
 
 ```powershell
 python experiments/train_meme_pilot.py
-$env:HATEXAI_CONFIG = "configs/english_hinglish.yaml"
+$env:HATEXAI_CONFIG = "configs/english_hinglish_ngrams.yaml"
 $env:OMP_NUM_THREADS = "2"
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
 ```
 
-The meme pilot requires a supplied caption. Its overlay measures the score change when each of nine
-image regions is covered. CADD context and threshold-based disparity comparisons are offline
+To serve the original bilingual checkpoint from the first training command, use
+`configs/english_hinglish.yaml`. The meme pilot requires a supplied caption. Its overlay measures
+the score change when each of nine image regions is covered. CADD context and threshold-based disparity comparisons are offline
 experiments. Reports and checkpoints are stored under `outputs/`.
 
 ### 1. Generate reproducible evaluation artifacts

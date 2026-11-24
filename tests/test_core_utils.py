@@ -32,6 +32,14 @@ def test_baseline_ablation_features_all_build():
         build_linear_pipeline(feature_set="nope")
 
 
+def test_baseline_can_fit_longer_character_ngrams():
+    model = build_linear_pipeline(char_ngram_range=(3, 5))
+    model.fit(["kite apple", "kart top", "kite pear", "cart cup"], [0, 1, 0, 1])
+    char_features = dict(model.named_steps["features"].transformer_list)["char"].vocabulary_
+    assert char_features
+    assert all(3 <= len(gram) <= 5 for gram in char_features)
+
+
 def test_splits_use_identical_fusion_for_baseline_and_dataset():
     """The baseline must not leak Language/CodeMixed tokens the model does not get."""
     texts, _ = load_text_split("data/synthetic/train.jsonl")
