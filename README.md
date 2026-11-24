@@ -128,6 +128,16 @@ The validation-selected review policy routed 284 test posts (14.8%) to human rev
 records have the English release label. Evaluation across languages requires additional licensed data.
 The checkpoint and JSON reports are written under `outputs/hatexplain-baseline-v1/`.
 
+```bash
+python experiments/evaluate_public_baseline.py --config configs/hatexplain_baseline.yaml
+```
+
+This evaluates the saved checkpoint. The binary false-positive rate was 5.5% for the source
+`normal` class (43/782) and 12.0% for `offensive` (66/548). For the 1,812 test posts with more
+than five tokens, mean occlusion comprehensiveness was 0.096 versus 0.031 for a seeded random
+mask. With only the five selected tokens retained, mean predicted-class probability was 0.832
+versus 0.757 for five random tokens. The reports record the checkpoint and test checksums.
+
 ### Synthetic diagnostics
 
 Run `python experiments/run_experiments.py` to regenerate. Generated on the bundled diagnostic data.

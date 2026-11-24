@@ -39,6 +39,13 @@ The service checks the checkpoint and threshold against the training record. The
 review outcome and matching evaluation artifacts, and the frontend uses that outcome for display
 and feedback submission.
 
+The public evaluation command scored all 1,924 test posts by original HateXplain label and
+compared occlusion evidence with same-size random masks on 1,812 posts longer than five tokens.
+False positives occurred in 43 of 782 normal posts and 66 of 548 offensive posts. The mean
+probability drop after removing the five selected tokens was 0.096 versus 0.031 under random
+deletion. Mean retained probability was 0.832 versus 0.757. These are perturbation measurements
+for this checkpoint and do not assess generated rationales or intent.
+
 ---
 
 **Audit date:** 2026-10-13

@@ -44,16 +44,15 @@ def occlusion_attribution(
     tokens = _tokenize_for_occlusion(text)
     if not tokens:
         return [], []
-    base = float(predict_proba([text])[0][target_class])
-    scores: list[float] = []
+    inputs = [text]
     for i, _ in enumerate(tokens):
         masked_tokens = tokens[:i] + ([token_replacement] if token_replacement else []) + tokens[i + 1 :]
         masked = " ".join(t for t in masked_tokens if t)
         if not masked.strip():
             masked = " "
-        prob = float(predict_proba([masked])[0][target_class])
-        scores.append(base - prob)
-    return tokens, scores
+        inputs.append(masked)
+    probabilities = predict_proba(inputs)[:, target_class]
+    return tokens, (probabilities[0] - probabilities[1:]).tolist()
 
 
 def lime_attribution(

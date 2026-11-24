@@ -63,6 +63,12 @@ def test_benchmark_checkpoint_policy_and_analytics_are_served(benchmark_config, 
     monkeypatch.setenv("HATEXAI_CONFIG", str(config_path))
     monkeypatch.setattr(registry, "_config", None)
     monkeypatch.setattr(registry, "_service", None)
+    evaluation_dir = Path(benchmark_config["output_dir"]) / "eval"
+    training = load_json(evaluation_dir / "baseline_training.json")
+    report = {"n": 24, "checkpoint_sha256": training["checkpoint_sha256"],
+              "test_sha256": training["dataset_splits"]["test"]["sha256"]}
+    write_json(evaluation_dir / "error_analysis.json", report)
+    write_json(evaluation_dir / "faithfulness.json", {**report, "checkpoint_sha256": "stale"})
 
     with TestClient(create_app()) as client:
         health = client.get("/health").json()
@@ -81,6 +87,8 @@ def test_benchmark_checkpoint_policy_and_analytics_are_served(benchmark_config, 
         assert prediction["model"]["version"] == health["model_version"]
         evaluation = client.get("/api/evaluation").json()
         assert evaluation["available"]["baseline_test"] == results["baseline_test"]
+        assert evaluation["available"]["error_analysis"] == report
+        assert "faithfulness" in evaluation["missing"]
         assert "ablation" in evaluation["missing"]
 
     threshold_path = Path(benchmark_config["output_dir"]) / "eval" / "threshold.json"

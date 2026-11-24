@@ -237,6 +237,7 @@ def create_app() -> FastAPI:
     @app.get("/api/evaluation")
     def evaluation() -> dict[str, Any]:
         eval_dir = _evaluation_dir()
+        public_benchmark = bool(get_config()["data"].get("manifest_path"))
         artifacts = {
             "baseline_test": "baseline_test.json",
             "threshold": "threshold.json",
@@ -247,15 +248,27 @@ def create_app() -> FastAPI:
             "ablation": "ablation.json",
             "run_manifest": "run_manifest.json",
         }
-        if get_config()["data"].get("manifest_path"):
-            artifacts.update(baseline_training="baseline_training.json", baseline_val="baseline_val.json")
+        if public_benchmark:
+            artifacts.update(baseline_training="baseline_training.json", baseline_val="baseline_val.json",
+                             error_analysis="error_analysis.json")
+        training_path = eval_dir / "baseline_training.json"
+        training = json.loads(training_path.read_text(encoding="utf-8")) if (
+            public_benchmark and training_path.exists()
+        ) else {}
         out: dict[str, Any] = {"available": {}, "missing": []}
         for key, filename in artifacts.items():
             path = eval_dir / filename
-            if path.exists():
-                out["available"][key] = json.loads(path.read_text(encoding="utf-8"))
-            else:
+            if not path.exists():
                 out["missing"].append(key)
+                continue
+            artifact = json.loads(path.read_text(encoding="utf-8"))
+            if public_benchmark and key in {"faithfulness", "error_analysis"} and (
+                not training or artifact.get("checkpoint_sha256") != training.get("checkpoint_sha256")
+                or artifact.get("test_sha256") != training.get("dataset_splits", {}).get("test", {}).get("sha256")
+            ):
+                out["missing"].append(key)
+                continue
+            out["available"][key] = artifact
         out["run_hint"] = (
             "python scripts/run_pipeline.py --config configs/hatexplain_baseline.yaml --stage baseline"
             if get_config().get("benchmark_name") == "HateXplain"

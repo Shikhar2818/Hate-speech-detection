@@ -42,14 +42,15 @@ def sufficiency(
 ) -> float:
     """Probability retained when *only* the top-k tokens are kept.
 
-    Higher means the highlighted tokens alone carry the decision. Reported
+    Retained tokens stay in their original order. Higher means the highlighted
+    tokens alone carry the decision. Reported
     alongside comprehensiveness because either metric in isolation is easy to
     game.
     """
     if not tokens:
         return 0.0
     ranked = sorted(range(len(tokens)), key=lambda i: abs(scores[i]), reverse=True)[:top_k]
-    kept = _masked_text([tokens[i] for i in ranked])
+    kept = _masked_text([tokens[i] for i in sorted(ranked)])
     return float(predict_proba([kept])[0][target_class])
 
 

@@ -44,7 +44,7 @@ function renderManifest(manifest) {
   );
 }
 
-function renderHeadline(test) {
+function renderHeadline(test, errorAnalysis) {
   const container = clear($("#headline-metrics"));
   if (!test || test.unavailable) {
     container.append(el("div", { class: "empty", text: "No test metrics available." }));
@@ -69,6 +69,9 @@ function renderHeadline(test) {
     barRow("False positive rate", test.false_positive_rate, { cls: "warn" }),
     barRow("False negative rate", test.false_negative_rate, { cls: "danger" })
   );
+  for (const row of errorAnalysis?.native_labels || []) {
+    rates.append(barRow(`${row.source_label} errors (n=${row.support})`, row.error_rate));
+  }
 
   const cm = clear($("#confusion"));
   const matrix = test.confusion_matrix || {};
@@ -233,6 +236,12 @@ function renderFaithfulness(faith) {
     metricTile(`Mean comprehensiveness (n=${faith.n})`, num(faith.mean_comprehensiveness, 3)),
     metricTile(`Mean sufficiency (n=${faith.n})`, num(faith.mean_sufficiency, 3))
   );
+  if (typeof faith.mean_random_comprehensiveness === "number") {
+    container.append(
+      metricTile("Random mask comprehensiveness", num(faith.mean_random_comprehensiveness, 3)),
+      metricTile("Random mask sufficiency", num(faith.mean_random_sufficiency, 3))
+    );
+  }
   $("#faith-note").textContent = faith.note || "";
 }
 
@@ -246,9 +255,9 @@ async function loadDashboard() {
     return;
   }
   const available = data.available || {};
-  showAlert($("#dashboard-alert"), "ok", "Artifacts loaded from outputs/eval.");
+  showAlert($("#dashboard-alert"), "ok", "Evaluation artifacts loaded.");
   renderManifest(available.run_manifest || available.baseline_training);
-  renderHeadline(available.baseline_test);
+  renderHeadline(available.baseline_test, available.error_analysis);
   renderThreshold(available.threshold, available.test_three_way);
   renderComparison(available.comparison);
   renderAblation(available.ablation);
