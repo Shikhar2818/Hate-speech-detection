@@ -1,9 +1,14 @@
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from backend import registry
+from backend.main import create_app
 from hatexai.baselines.linear import load_linear_baseline
 from hatexai.data.public_sources import file_digest, load_json
+from hatexai.eval.thresholds import decision_three_way
+from hatexai.inference import build_service_from_config
 from hatexai.utils import write_json, write_jsonl
 from scripts.run_pipeline import run_public_baseline
 
@@ -48,3 +53,37 @@ def test_unverified_training_file_stops_before_fitting(benchmark_config):
     with pytest.raises(ValueError, match="train.*checksum"):
         run_public_baseline(benchmark_config)
     assert not Path(benchmark_config["output_dir"]).exists()
+
+
+def test_benchmark_checkpoint_policy_and_analytics_are_served(benchmark_config, tmp_path, monkeypatch):
+    benchmark_config.update(benchmark_name="HateXplain", model_version="linear-hatexplain-test")
+    results = run_public_baseline(benchmark_config)
+    config_path = tmp_path / "serve.yaml"
+    write_json(config_path, benchmark_config)
+    monkeypatch.setenv("HATEXAI_CONFIG", str(config_path))
+    monkeypatch.setattr(registry, "_config", None)
+    monkeypatch.setattr(registry, "_service", None)
+
+    with TestClient(create_app()) as client:
+        health = client.get("/health").json()
+        assert health["model_loaded"] and health["model_version"] == "linear-hatexplain-test"
+        model_info = client.get("/api/model-info").json()
+        assert model_info["supported_languages"] == ["English"]
+        assert "HateXplain" in model_info["dataset"]["shipped"]
+        response = client.post("/api/explain", json={"text": "red sea", "method": "occlusion"})
+        assert response.status_code == 200
+        prediction = response.json()
+        threshold = results["threshold"]
+        assert prediction["decision"] == decision_three_way(
+            prediction["probability_hate"], threshold["low"], threshold["high"],
+        )
+        assert prediction["explanation"]["tokens"]
+        assert prediction["model"]["version"] == health["model_version"]
+        evaluation = client.get("/api/evaluation").json()
+        assert evaluation["available"]["baseline_test"] == results["baseline_test"]
+        assert "ablation" in evaluation["missing"]
+
+    threshold_path = Path(benchmark_config["output_dir"]) / "eval" / "threshold.json"
+    write_json(threshold_path, {"low": 0, "high": 1})
+    with pytest.raises(ValueError, match="do not match"):
+        build_service_from_config(benchmark_config)

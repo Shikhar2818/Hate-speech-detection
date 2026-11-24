@@ -57,11 +57,35 @@ def store() -> FeedbackStore:
     return FeedbackStore(os.getenv("HATEXAI_FEEDBACK_DIR", str(FEEDBACK_DIR)))
 
 
+def _evaluation_dir() -> Path:
+    config = get_config()
+    if config["data"].get("manifest_path"):
+        return Path(config["output_dir"]) / "eval"
+    return EVAL_DIR
+
+
+def _model_version() -> str:
+    return get_config().get("model_version", MODEL_VERSION)
+
+
 def _model_info() -> dict[str, Any]:
     config = get_config()
+    benchmark = config.get("benchmark_name")
+    data_description = (
+        f"{benchmark} public benchmark with an English held-out test set."
+        if benchmark else "data/synthetic (24 train / 6 val / 6 test, 36 records, illustrative only)"
+    )
+    data_limitations = (
+        ["The benchmark classifier was evaluated on English HateXplain posts.",
+         "This run provides no evidence about Hindi or Hinglish performance."]
+        if benchmark else [
+            "The demo model is trained on 24 synthetic wiring examples.",
+            "Probabilities on the bundled test split are compressed near 0.5.",
+        ]
+    )
     return {
         "name": "HateXAI",
-        "version": MODEL_VERSION,
+        "version": _model_version(),
         "architecture": {
             "served_model": "TF-IDF (word + char n-grams) + logistic regression, Platt-calibrated",
             "optional_models": [
@@ -70,7 +94,7 @@ def _model_info() -> dict[str, Any]:
                 "Flan-T5 explanation policy with DPO preference alignment (implemented, untrained here)",
             ],
         },
-        "supported_languages": [
+        "supported_languages": ["English"] if benchmark else [
             "English",
             "Hindi (Devanagari and romanised)",
             "Hindi-English code-mixed (Hinglish)",
@@ -83,12 +107,11 @@ def _model_info() -> dict[str, Any]:
         },
         "explanation_methods": ["lime", "occlusion"],
         "evaluation": {
-            "artifacts_available": EVAL_DIR.exists(),
-            "note": "Metrics are read from outputs/eval; run experiments/run_experiments.py to regenerate.",
+            "artifacts_available": _evaluation_dir().exists(),
+            "note": "Metrics are read from the configured model's evaluation directory.",
         },
         "known_limitations": [
-            "The shipped model is trained on a 30-record synthetic wiring set, not a research corpus.",
-            "Probabilities on the bundled test split are compressed near 0.5, so the abstention band routes most examples to review.",
+            *data_limitations,
             "Labels are culturally contested; the model is a research prototype, not an enforcement tool.",
             "Explanation scores are model-derived attributions, not evidence of intent.",
         ],
@@ -97,7 +120,7 @@ def _model_info() -> dict[str, Any]:
             "punitive action against a person or account. Always keep a human in the loop."
         ),
         "dataset": {
-            "shipped": "data/synthetic (24 train / 6 val / 6 test, 36 records, illustrative only)",
+            "shipped": data_description,
             "probes": "data/probes/hard_cases.jsonl (36 author-constructed adversarial probes)",
             "recommended_public": ["HateXplain", "HASOC", "OLID/SOLID", "MMHS150K", "Hateful Memes"],
         },
@@ -132,8 +155,8 @@ def create_app() -> FastAPI:
         return HealthResponse(
             status="ok" if service_loaded else "degraded",
             model_loaded=service_loaded,
-            model_version=MODEL_VERSION,
-            artifacts_present=EVAL_DIR.exists(),
+            model_version=_model_version(),
+            artifacts_present=_evaluation_dir().exists(),
         )
 
     @app.get("/api/model-info")
@@ -151,7 +174,7 @@ def create_app() -> FastAPI:
             print(f"[predict] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Inference failed. The model may be unavailable.") from exc
         result.pop("explanation", None)  # /api/predict returns no explanation payload
-        result["model"] = {"name": "HateXAI", "version": MODEL_VERSION, "type": "linear-calibrated"}
+        result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
         return result
 
     @app.post("/api/explain", response_model=ExplainResponse, dependencies=[Depends(rate_limit)])
@@ -162,7 +185,7 @@ def create_app() -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             print(f"[explain] inference failed: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=500, detail="Explanation failed. The model may be unavailable.") from exc
-        result["model"] = {"name": "HateXAI", "version": MODEL_VERSION, "type": "linear-calibrated"}
+        result["model"] = {"name": "HateXAI", "version": _model_version(), "type": "linear-calibrated"}
         return result
 
     @app.post("/api/vision-check", dependencies=[Depends(rate_limit)])
@@ -213,6 +236,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/evaluation")
     def evaluation() -> dict[str, Any]:
+        eval_dir = _evaluation_dir()
         artifacts = {
             "baseline_test": "baseline_test.json",
             "threshold": "threshold.json",
@@ -223,14 +247,20 @@ def create_app() -> FastAPI:
             "ablation": "ablation.json",
             "run_manifest": "run_manifest.json",
         }
+        if get_config()["data"].get("manifest_path"):
+            artifacts.update(baseline_training="baseline_training.json", baseline_val="baseline_val.json")
         out: dict[str, Any] = {"available": {}, "missing": []}
         for key, filename in artifacts.items():
-            path = EVAL_DIR / filename
+            path = eval_dir / filename
             if path.exists():
                 out["available"][key] = json.loads(path.read_text(encoding="utf-8"))
             else:
                 out["missing"].append(key)
-        out["run_hint"] = "python experiments/run_experiments.py --config configs/default.yaml"
+        out["run_hint"] = (
+            "python scripts/run_pipeline.py --config configs/hatexplain_baseline.yaml --stage baseline"
+            if get_config().get("benchmark_name") == "HateXplain"
+            else "python experiments/run_experiments.py --config configs/default.yaml"
+        )
         return out
 
     @app.post("/api/feedback", response_model=FeedbackResponse, status_code=201, dependencies=[Depends(rate_limit)])

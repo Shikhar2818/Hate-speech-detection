@@ -34,6 +34,11 @@ after building the HateXplain profile. The checkpoint is
 directory contains the training record, classification metrics and review-policy results. This run
 supports an English baseline estimate. Multilingual performance, vision and DPO remain pending.
 
+The FastAPI app can serve the benchmark baseline with `HATEXAI_CONFIG=configs/hatexplain_baseline.yaml`.
+The service checks the checkpoint and threshold against the training record. The API provides the
+review outcome and matching evaluation artifacts, and the frontend uses that outcome for display
+and feedback submission.
+
 ---
 
 **Audit date:** 2026-10-13

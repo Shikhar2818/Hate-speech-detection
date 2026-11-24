@@ -7,6 +7,8 @@ import numpy as np
 
 from hatexai.baselines.linear import load_linear_baseline
 from hatexai.data.preprocess import extract_text_features, fuse_text
+from hatexai.data.public_sources import file_digest, load_json
+from hatexai.eval.thresholds import decision_three_way
 from hatexai.reward.scoring import heuristic_reward
 from hatexai.xai.attributions import (
     counterfactual_hints,
@@ -44,10 +46,12 @@ class LinearHateService:
     any ``predict_proba`` callable can be substituted.
     """
 
-    def __init__(self, model_path: str | Path, lime_samples: int = 120):
+    def __init__(self, model_path: str | Path, lime_samples: int = 120,
+                 decision_bounds: tuple[float, float] | None = None):
         self.model = load_linear_baseline(model_path)
         self.lime_samples = lime_samples
         self.model_path = str(model_path)
+        self.decision_bounds = decision_bounds
 
     def predict_proba_texts(self, texts: list[str]) -> np.ndarray:
         return self.model.predict_proba(texts)
@@ -112,6 +116,8 @@ class LinearHateService:
                 ),
             },
         }
+        if self.decision_bounds is not None:
+            result["decision"] = decision_three_way(float(probs[1]), *self.decision_bounds)
         # Reward is only meaningful with an external label. Computing it against
         # the model's own prediction (the previous behaviour) pinned the
         # correctness term to 1.0 for every input — see PROJECT_AUDIT.md 3.1.
@@ -123,10 +129,23 @@ class LinearHateService:
 
 
 def build_service_from_config(config: dict[str, Any]) -> LinearHateService:
-    """Load the shipped baseline, training it first only if it is missing."""
-    ckpt = Path(config["output_dir"]) / "checkpoints" / "linear_baseline.joblib"
-    if not ckpt.exists():
+    """Load the configured baseline. The demo can bootstrap its checkpoint."""
+    output = Path(config["output_dir"])
+    ckpt = output / "checkpoints" / "linear_baseline.joblib"
+    bounds = None
+    if config["data"].get("manifest_path"):
+        training = load_json(output / "eval" / "baseline_training.json")
+        threshold = output / "eval" / "threshold.json"
+        if (training["checkpoint_sha256"] != file_digest(ckpt)
+                or training["threshold_sha256"] != file_digest(threshold)):
+            raise ValueError("Benchmark checkpoint and threshold do not match the training record")
+        policy = load_json(threshold)
+        bounds = (float(policy["low"]), float(policy["high"]))
+        if not 0 <= bounds[0] <= bounds[1] <= 1:
+            raise ValueError("Benchmark threshold bounds must be ordered probabilities")
+    elif not ckpt.exists():
         from hatexai.baselines.linear import train_linear_baseline
 
         train_linear_baseline(config)
-    return LinearHateService(ckpt, lime_samples=int(config.get("xai", {}).get("lime_samples", 120)))
+    return LinearHateService(ckpt, lime_samples=int(config.get("xai", {}).get("lime_samples", 120)),
+                             decision_bounds=bounds)

@@ -60,6 +60,17 @@ uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Open <http://127.0.0.1:8000/>. The frontend is served from the same origin as the API, so no CORS
 configuration is needed in the common case. Interactive API docs are at `/docs`.
 
+After training the public baseline, serve the saved English HateXplain model and its evaluation artifacts
+by setting `HATEXAI_CONFIG` to `configs/hatexplain_baseline.yaml` before launching Uvicorn. In PowerShell:
+
+```powershell
+$env:HATEXAI_CONFIG = "configs/hatexplain_baseline.yaml"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+The public profile loads the saved checkpoint and validation-derived review band. The API returns
+`decision` for the three-way moderation outcome and retains the binary `label` for model attribution.
+
 ### 3. Run the tests
 
 ```bash

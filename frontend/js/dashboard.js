@@ -37,8 +37,8 @@ function renderManifest(manifest) {
     el("div", { class: "card-head" }, [el("h2", { style: "margin:0", text: "Run manifest" })]),
     el("div", { class: "grid grid-4" }, [
       metricTile("Generated", manifest.generated_at ? manifest.generated_at.slice(0, 19).replace("T", " ") : "n/a"),
-      metricTile("Seed", String(manifest.seed ?? "n/a")),
-      metricTile("Device", manifest.device || "n/a"),
+      metricTile("Seed", String(manifest.seed ?? manifest.config?.seed ?? "n/a")),
+      metricTile("Device", manifest.device || manifest.config?.device || "n/a"),
       metricTile("Python", manifest.python || "n/a"),
     ])
   );
@@ -247,7 +247,7 @@ async function loadDashboard() {
   }
   const available = data.available || {};
   showAlert($("#dashboard-alert"), "ok", "Artifacts loaded from outputs/eval.");
-  renderManifest(available.run_manifest);
+  renderManifest(available.run_manifest || available.baseline_training);
   renderHeadline(available.baseline_test);
   renderThreshold(available.threshold, available.test_three_way);
   renderComparison(available.comparison);

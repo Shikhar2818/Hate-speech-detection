@@ -8,6 +8,7 @@ would hold an XLM-R checkpoint, where per-request loading would be catastrophic
 for latency and memory.
 """
 
+import os
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -31,7 +32,7 @@ def get_config(config_path: str | Path | None = None) -> dict[str, Any]:
     global _config
     with _lock:
         if _config is None:
-            _config = load_config(config_path or DEFAULT_CONFIG)
+            _config = load_config(config_path or os.getenv("HATEXAI_CONFIG") or DEFAULT_CONFIG)
         return _config
 
 

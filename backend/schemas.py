@@ -50,6 +50,7 @@ class Explanation(BaseModel):
 class PredictionResponse(BaseModel):
     label: str
     label_id: int
+    decision: Literal["hate", "non_hate", "needs_review"] | None = None
     probability_hate: float
     probability_non_hate: float
     confidence: float

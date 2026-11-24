@@ -12,6 +12,7 @@ const EXAMPLES = [
 const state = { operating: null, last: null };
 
 function threeWayVerdict(result) {
+  if (result.decision) return result.decision === "needs_review" ? "review" : result.decision;
   const p = result.probability_hate;
   const op = state.operating;
   if (op && typeof op.low === "number" && typeof op.high === "number") {
@@ -90,13 +91,14 @@ function renderResult(result) {
 
   // Uncertainty + faithfulness tiles
   const unc = result.uncertainty || {};
+  const uncertain = verdict === "review" || unc.is_uncertain;
   body.append(
-    el("div", { class: `uncertainty ${unc.is_uncertain ? "warn" : "ok"}` }, [
-      el("strong", { text: unc.is_uncertain ? "⚠ Uncertain" : "✓ Confident" }),
+    el("div", { class: `uncertainty ${uncertain ? "warn" : "ok"}` }, [
+      el("strong", { text: uncertain ? "⚠ Uncertain" : "✓ Confident" }),
       el("span", {
         class: "small muted",
         text: `margin ${num(unc.margin, 3)} · entropy ${num(unc.normalized_entropy, 3)}${
-          unc.is_uncertain ? " — escalate to human review" : ""
+          uncertain ? " — escalate to human review" : ""
         }`,
       }),
     ])
@@ -227,7 +229,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       JSON.stringify({
         text: textarea.value,
         context: $("#post-context").value,
-        predicted_label: state.last.label,
+        predicted_label: state.last.decision || state.last.label,
         probability_hate: state.last.probability_hate,
         model_version: state.last.model ? state.last.model.version : "",
       })

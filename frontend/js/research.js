@@ -24,7 +24,7 @@ function render(info) {
 
   const d = info.dataset;
   clear($("#model-datasets")).append(
-    el("p", {}, [el("strong", { text: "Shipped: " }), document.createTextNode(d.shipped)]),
+    el("p", {}, [el("strong", { text: "Active dataset: " }), document.createTextNode(d.shipped)]),
     el("p", {}, [el("strong", { text: "Probes: " }), document.createTextNode(d.probes)]),
     el("p", { class: "muted small", text: "Recommended public corpora (convert with scripts/prepare_public_data.py):" }),
     list(d.recommended_public)
