@@ -135,74 +135,7 @@ function initReveal() {
   nodes.forEach((n) => observer.observe(n));
 }
 
-/* ---------- Decorative hero canvas ---------- */
-
-function initHeroCanvas() {
-  const canvas = $("#hero-canvas");
-  if (!canvas || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const ctx = canvas.getContext("2d");
-  let width = 0;
-  let height = 0;
-  let points = [];
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-  function resize() {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-    canvas.width = width * DPR;
-    canvas.height = height * DPR;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const count = Math.min(64, Math.round((width * height) / 22000));
-    points = Array.from({ length: count }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 0.28,
-      vy: (Math.random() - 0.5) * 0.28,
-    }));
-  }
-
-  function frame() {
-    ctx.clearRect(0, 0, width, height);
-    for (const p of points) {
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x < 0 || p.x > width) p.vx *= -1;
-      if (p.y < 0 || p.y > height) p.vy *= -1;
-    }
-    for (let i = 0; i < points.length; i += 1) {
-      for (let j = i + 1; j < points.length; j += 1) {
-        const dx = points[i].x - points[j].x;
-        const dy = points[i].y - points[j].y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 130) {
-          ctx.strokeStyle = `rgba(139,124,246,${(1 - dist / 130) * 0.24})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(points[i].x, points[i].y);
-          ctx.lineTo(points[j].x, points[j].y);
-          ctx.stroke();
-        }
-      }
-    }
-    for (const p of points) {
-      ctx.fillStyle = "rgba(34,211,238,0.7)";
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 1.7, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    requestAnimationFrame(frame);
-  }
-
-  resize();
-  window.addEventListener("resize", resize);
-  requestAnimationFrame(frame);
-}
-
 document.addEventListener("DOMContentLoaded", () => {
   initChrome();
   initReveal();
-  initHeroCanvas();
 });

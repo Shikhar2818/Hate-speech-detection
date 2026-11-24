@@ -114,6 +114,10 @@ def test_vision_modality_is_not_faked(client):
     mislabeled = client.post("/api/vision-check", files={"image": ("a.jpg", _png_bytes(), "image/jpeg")})
     assert mislabeled.status_code == 415
 
+    unavailable = client.post("/api/meme-predict", files={"image": ("a.png", _png_bytes(), "image/png")},
+                              data={"caption": "A supplied caption"})
+    assert unavailable.status_code == 503
+
 
 def test_feedback_is_a_review_candidate_and_reviewable(client):
     submit = client.post(

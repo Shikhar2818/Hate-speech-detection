@@ -20,14 +20,15 @@ abstention outcome for ambiguous inputs.
 | --- | --- |
 | Preprocessing, calibrated TF-IDF baseline, robustness + faithfulness evaluation | **Working and reproducible** |
 | TF-IDF on the public HateXplain benchmark | **Trained and evaluated on held-out English posts** |
+| English and Hinglish research profile | **Trained and evaluated locally on HateXplain and HiFoX** |
 | FastAPI backend (`/api/predict`, `/api/explain`, `/api/evaluation`, `/api/feedback`, …) | **Working, tested** |
 | HTML/CSS/JS dashboard (detection, explainability, evaluation, feedback, research) | **Working, tested** |
 | XLM-R / DistilBERT transformer classifier | **Implemented; no checkpoint trained in this environment** |
 | DPO rationale alignment (Flan-T5) | **Implemented and unit-tested; not trained here** |
-| Vision / meme analysis (CLIP fusion) | **Implemented but unevaluated; image inputs are rejected, never faked** |
+| Meme classification and image attributions | **Optional English pilot using TinyCLIP and captions. The gated XLM-R/CLIP trainer is a separate experiment.** |
 
-The shipped, runnable model is the **calibrated word+char TF-IDF baseline**. Everything else is reported as
-unavailable rather than simulated.
+The default profile uses the calibrated word and character TF-IDF baseline. The optional research
+profile below enables a trained English and Hinglish model and an English meme pilot.
 
 ---
 
@@ -41,6 +42,38 @@ source .venv/Scripts/activate        # Windows Git Bash; use Activate.ps1 in Pow
 pip install -e .
 pip install -r requirements.txt
 ```
+
+### Optional local research profile
+
+Use the pinned HateXplain release and the authors' [HiFoX Task A files](https://huggingface.co/datasets/yashbleh/HiFox_Dataset/tree/420bcd5a129be5c9ecf362a0579aafdef30fdc01)
+under `data/raw/hifox/`. HiFoX permits local research and requires author permission for publication.
+The context experiment uses the authors' [CADD split files](https://github.com/nlpcl-lab/CADD_dataset/tree/090f41c26976b2f763ff445cd6d5840d42a4ddeb/Dataset)
+under `data/raw/cadd/`. The CADD README specifies CC BY-SA 4.0.
+
+```powershell
+python scripts/prepare_public_data.py --profile english-hinglish --output data/processed/english-hinglish-v1
+python scripts/run_pipeline.py --config configs/english_hinglish.yaml --stage baseline
+python scripts/prepare_public_data.py --profile cadd --output data/processed/cadd-v1
+python experiments/compare_context.py
+python experiments/compare_language_policy.py
+```
+
+For the meme pilot, save the pinned [Multi3Hate Parquet file](https://huggingface.co/datasets/MinhDucBui/Multi3Hate/tree/e3692a908ade3952bd70bb0cc1ca5eac8b23663c/data)
+as `data/raw/multi3hate/memes.parquet`. Its CC BY-NC-ND terms apply. Keep this pilot local for
+noncommercial research. Save `config.json`, `preprocessor_config.json` and `pytorch_model.bin` from
+[TinyCLIP](https://huggingface.co/wkcn/TinyCLIP-ViT-8M-16-Text-3M-YFCC15M/tree/b6ffcf486212e8f3863b8009a4021dbea481b817)
+under `outputs/encoders/tinyclip/`.
+
+```powershell
+python experiments/train_meme_pilot.py
+$env:HATEXAI_CONFIG = "configs/english_hinglish.yaml"
+$env:OMP_NUM_THREADS = "2"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
+```
+
+The meme pilot requires a supplied caption. Its overlay measures the score change when each of nine
+image regions is covered. CADD context and threshold-based disparity comparisons are offline
+experiments. Reports and checkpoints are stored under `outputs/`.
 
 ### 1. Generate reproducible evaluation artifacts
 
@@ -326,7 +359,8 @@ slides/                   defense deck
 
 - The default demo model is trained on 24 synthetic examples. Its probabilities on the 6-record
   demo test split are compressed near 0.5.
-- No vision or meme capability is trained or evaluated; image inputs are validated and rejected.
+- The optional meme pilot was evaluated on one small English benchmark. It requires human review
+  and a supplied caption. The default profile offers image file validation.
 - Attribution is **not** evidence of intent, and generated rationales are displayed separately from
   model-derived evidence.
 - Hate-speech labels are culturally contested; the probe set marks contested cases explicitly.

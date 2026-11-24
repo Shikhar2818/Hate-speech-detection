@@ -31,6 +31,7 @@
   </p>
 
   <div id="dashboard-alert" style="margin-top:18px"></div>
+  <section class="card hidden" id="meme-metrics" style="margin-top:18px;"></section>
 
   <section class="card" style="margin-top:18px;">
     <div class="card-head"><h2 style="margin:0">Analysis activity</h2></div>
@@ -80,7 +81,7 @@
     </div>
   </section>
 
-  <section class="card reveal">
+  <section class="card reveal" data-artifact="comparison">
     <div class="card-head"><h2 style="margin:0">System comparison</h2></div>
     <div class="table-scroll" tabindex="0" role="region" aria-label="System comparison table">
       <table>
@@ -93,7 +94,7 @@
     <p class="muted small" id="comparison-caveat" style="margin-top:12px"></p>
   </section>
 
-  <section class="card reveal">
+  <section class="card reveal" data-artifact="ablation">
     <div class="card-head"><h2 style="margin:0">Ablation: features and calibration</h2></div>
     <p class="muted small" id="ablation-note"></p>
     <div class="table-scroll" tabindex="0" role="region" aria-label="Ablation table">
@@ -106,7 +107,7 @@
     </div>
   </section>
 
-  <section class="card reveal">
+  <section class="card reveal" data-artifact="probes">
     <div class="card-head"><h2 style="margin:0">Robustness: adversarial diagnostic probes</h2></div>
     <p class="muted small" id="probe-note"></p>
     <div class="grid grid-2">
@@ -117,7 +118,7 @@
     <div id="probe-failures" class="table-scroll"></div>
   </section>
 
-  <section class="card reveal">
+  <section class="card reveal" data-artifact="faithfulness">
     <div class="card-head"><h2 style="margin:0">Explanation faithfulness</h2></div>
     <div class="grid grid-2" id="faithfulness"></div>
     <p class="muted small" id="faith-note" style="margin-top:12px"></p>

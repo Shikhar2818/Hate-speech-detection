@@ -26,9 +26,9 @@
 <main class="container" style="padding: 34px 22px 60px;">
   <h1 style="margin-bottom:.2em">Detection workspace</h1>
   <p class="muted" style="max-width: 70ch;">
-    Enter a post and optional context. The model returns a decision, a calibrated probability, an
-    uncertainty signal, and the tokens that most influenced it.
+    Enter a post to see the model's decision and the words that influenced it.
   </p>
+  <p class="muted small" id="analysis-scope"></p>
 
   <div class="grid grid-2" style="align-items:start; margin-top: 22px;">
     <section class="card">
@@ -78,16 +78,21 @@
   </div>
 
   <section class="card" style="margin-top:18px;">
-    <div class="card-head"><h3 style="margin:0">Image file validation</h3></div>
-    <p class="muted small" id="image-help">Upload a PNG, JPEG, or WebP up to 5 MB. Image classification is unavailable.</p>
+    <div class="card-head"><h3 id="image-heading" style="margin:0">Image file validation</h3></div>
+    <p class="muted small" id="image-help">PNG, JPEG, or WebP up to 5 MB. This checks the file.</p>
     <form id="image-form">
       <label for="image-file">Image file</label>
       <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp" aria-describedby="image-help" required />
+      <div id="meme-caption-field" class="hidden" style="margin-top:12px;">
+        <label for="meme-caption">Text shown in the meme</label>
+        <textarea id="meme-caption" rows="2" maxlength="5000"></textarea>
+      </div>
       <div style="margin-top:12px;">
         <button class="btn btn-ghost" id="image-submit" type="submit">Validate image</button>
       </div>
     </form>
     <div id="image-alert" aria-live="polite"></div>
+    <div id="meme-evidence"></div>
   </section>
 </main>
 

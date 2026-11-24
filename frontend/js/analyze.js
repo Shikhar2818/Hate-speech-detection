@@ -9,7 +9,7 @@ const EXAMPLES = [
   "Mere dost ne kal interview crack kiya, results aaj aayenge. Wish him luck!",
 ];
 
-const state = { operating: null, last: null, pending: null };
+const state = { operating: null, last: null, pending: null, memeEnabled: false };
 
 function threeWayVerdict(result) {
   if (result.decision) return result.decision === "needs_review" ? "review" : result.decision;
@@ -68,7 +68,7 @@ function renderResult(result, input) {
   body.append(
     el("div", { class: "result-head" }, [
       el("span", { class: `verdict ${verdict}`, text: VERDICT_LABEL[verdict] }),
-      el("span", { class: "muted small", text: `language: ${result.language}${result.code_mixed ? " · code-mixed" : ""}` }),
+      el("span", { class: "muted small", text: `Language estimate: ${result.language}${result.code_mixed ? " · mixed scripts" : ""}` }),
     ])
   );
 
@@ -193,14 +193,34 @@ async function validateImage(event) {
   event.preventDefault();
   const file = $("#image-file").files[0];
   const alert = clear($("#image-alert"));
+  const evidence = clear($("#meme-evidence"));
   if (!file) return;
   const body = new FormData();
   body.append("image", file);
+  if (state.memeEnabled) body.append("caption", $("#meme-caption").value);
   const button = $("#image-submit");
   button.disabled = true;
   try {
-    const result = await API.post("/api/vision-check", body);
-    showAlert(alert, "ok", `${result.format} · ${result.width} × ${result.height}. ${result.message}`);
+    if (state.memeEnabled) {
+      const result = await API.post("/api/meme-predict", body);
+      showAlert(alert, "ok", `Pilot label: ${result.decision === "hate" ? "Hate" : "Non-hate"} · Hate score ${pct(result.probability_hate)}`);
+      const url = URL.createObjectURL(file);
+      const image = el("img", { src: url, alt: "Uploaded meme with a 3 by 3 attribution overlay" });
+      image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+      image.addEventListener("error", () => URL.revokeObjectURL(url), { once: true });
+      evidence.append(
+        el("div", { class: "meme-preview" }, [
+          image,
+          el("div", { class: "meme-regions" }, result.region_deltas.map((delta, index) =>
+            el("span", { title: `Region ${index + 1}. Hate score change when covered: ${num(-delta)}`,
+              style: `background:rgba(${delta >= 0 ? "255,70,100" : "65,155,255"},${Math.min(0.7, Math.abs(delta) * 5)})` }))),
+        ]),
+        el("p", { class: "muted small", text: "Covering red regions lowers the hate score. Covering blue regions raises it." }),
+      );
+    } else {
+      const result = await API.post("/api/vision-check", body);
+      showAlert(alert, "ok", `${result.format} · ${result.width} × ${result.height}. ${result.message}`);
+    }
   } catch (err) {
     showAlert(alert, "error", err.message);
   } finally {
@@ -276,8 +296,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Operating point drives the three-way verdict; if it is missing, we fall
   // back to the raw label rather than inventing a threshold.
   try {
-    const evaluation = await API.get("/api/evaluation");
+    const [evaluation, info] = await Promise.all([API.get("/api/evaluation"), API.get("/api/model-info")]);
     state.operating = (evaluation.available && evaluation.available.threshold) || null;
+    $("#analysis-scope").textContent = info.supported_languages.length
+      ? `Held-out text evaluation: ${info.supported_languages.join(" and ")}.`
+      : "The demo profile uses a small synthetic dataset.";
+    if (info.modalities.image) {
+      state.memeEnabled = true;
+      $("#image-heading").textContent = "Analyze an English meme (research pilot)";
+      $("#image-help").textContent = "Upload a PNG, JPEG, or WebP up to 5 MB and enter its caption. Scores are experimental.";
+      $("#meme-caption-field").classList.remove("hidden");
+      $("#meme-caption").required = true;
+      $("#image-submit").textContent = "Analyze meme";
+    }
   } catch {
     state.operating = null;
   }

@@ -1,5 +1,30 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## Local multilingual, context, and meme experiments (2026-11-24)
+
+The `english_hinglish.yaml` profile serves the calibrated TF-IDF model trained on HateXplain and
+HiFoX Task A. Held-out reports are under `outputs/english-hinglish-v1/eval/`. HiFoX is available for
+local research. Its authors require permission for publication, so the paper keeps the earlier
+English-only results. These English and Hinglish cohorts come from different corpora.
+
+The CADD experiment fits the same model family twice, with and without the parent post's title
+and body. Shared parent text and duplicate comments are kept out of lower-priority splits.
+On 4,901 held-out comments, macro F1 was 0.617 for comments alone and 0.621 with parent context.
+The app's context field belongs to the text profile. CADD results cover the separate offline models.
+[CADD release and terms](https://github.com/nlpcl-lab/CADD_dataset)
+
+The English Multi3Hate pilot fits three classifiers using caption TF-IDF, frozen TinyCLIP image
+features, and their combination. On 57 held-out memes with separate templates, macro F1 was
+0.553, 0.474, and 0.683 respectively. The upload endpoint requires a manual caption. The nine
+region scores measure the result of covering each image region and rescoring the same caption.
+The pilot is for local noncommercial research. [Multi3Hate dataset card](https://huggingface.co/datasets/MinhDucBui/Multi3Hate)
+
+A separate validation-only threshold search minimizes the false-positive-rate gap between the
+English and Hinglish cohorts subject to at most three percentage points of validation recall loss
+per cohort. The saved test report includes both false-positive and false-negative rates.
+This threshold remains an offline comparison. Human-reviewed pairs of moderation rationales are
+still needed for the Flan-T5 DPO experiment.
+
 ## Project checklist review (2026-11-24)
 
 | Requirement | Current coverage |

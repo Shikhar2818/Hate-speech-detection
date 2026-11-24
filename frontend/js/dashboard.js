@@ -268,6 +268,23 @@ async function loadDashboard() {
     return;
   }
   const available = data.available || {};
+  for (const section of document.querySelectorAll("[data-artifact]")) {
+    section.classList.toggle("hidden", !available[section.dataset.artifact]);
+  }
+  if (available.meme_pilot) {
+    const pilot = available.meme_pilot;
+    const section = $("#meme-metrics");
+    section.classList.remove("hidden");
+    section.append(
+      el("h2", { text: "English meme pilot" }),
+      el("p", { class: "muted small", text: `Macro F1 on ${pilot.splits.test.n} held-out memes. Templates are separated by split.` }),
+      el("div", { class: "grid grid-3" }, [
+        metricTile("Caption only", num(pilot.results.caption.test.f1_macro)),
+        metricTile("Image only", num(pilot.results.image.test.f1_macro)),
+        metricTile("Caption and image", num(pilot.results.combined.test.f1_macro)),
+      ]),
+    );
+  }
   if (data.activity) {
     const counts = data.activity.by_decision;
     $("#activity-metrics").append(

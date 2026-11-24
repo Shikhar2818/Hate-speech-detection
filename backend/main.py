@@ -4,11 +4,12 @@ import json
 import os
 import time
 from collections import Counter, defaultdict, deque
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -25,6 +26,7 @@ from backend.schemas import (
     ReviewRequest,
 )
 from backend.store import FeedbackStore
+from hatexai.data.public_sources import file_digest, load_json
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 EVAL_DIR = PROJECT_ROOT / "outputs" / "eval"
@@ -68,16 +70,66 @@ def _model_version() -> str:
     return get_config().get("model_version", MODEL_VERSION)
 
 
+def _meme_output(config: dict[str, Any]) -> Path | None:
+    if not config.get("meme_output_dir") or not config.get("meme_encoder_dir"):
+        return None
+    output = Path(config["meme_output_dir"])
+    encoder = Path(config["meme_encoder_dir"])
+    if all(path.is_file() for path in (output / "meme.joblib", output / "evaluation.json",
+                                      encoder / "pytorch_model.bin", encoder / "config.json",
+                                      encoder / "preprocessor_config.json")):
+        return output
+    return None
+
+
+@lru_cache(maxsize=1)
+def _load_meme_pilot(output: Path, encoder: Path):
+    from hatexai.models.meme_pilot import MemePilot
+
+    checkpoint = output / "meme.joblib"
+    report = load_json(output / "evaluation.json")
+    if (file_digest(checkpoint) != report["checkpoint_sha256"]
+            or file_digest(encoder / "pytorch_model.bin") != report["encoder_sha256"]):
+        raise ValueError("Meme pilot files do not match the evaluation report")
+    return MemePilot(checkpoint, encoder)
+
+
+def _read_image(upload: UploadFile):
+    try:
+        from PIL import Image
+
+        if upload.content_type not in IMAGE_FORMATS:
+            raise HTTPException(status_code=415, detail=f"Unsupported image type: {upload.content_type}")
+        size = upload.file.seek(0, os.SEEK_END)
+        if size > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit")
+        upload.file.seek(0)
+        with Image.open(upload.file) as image:
+            format_name = image.format
+            if format_name != IMAGE_FORMATS[upload.content_type]:
+                raise HTTPException(status_code=415, detail="Image contents do not match the file type")
+            return image.convert("RGB"), format_name, size
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="File is not a decodable image") from exc
+    finally:
+        upload.file.close()
+
+
 def _model_info() -> dict[str, Any]:
     config = get_config()
     benchmark = config.get("benchmark_name")
+    languages = config.get("benchmark_languages", ["English"] if benchmark else [])
+    meme_available = _meme_output(config) is not None
     data_description = (
-        f"{benchmark} public benchmark with an English held-out test set."
+        f"{benchmark} · held-out languages: {', '.join(languages)}."
         if benchmark else "data/synthetic (24 train / 6 val / 6 test, 36 records, illustrative only)"
     )
     data_limitations = (
-        ["The benchmark classifier was evaluated on English HateXplain posts.",
-         "This run provides no evidence about Hindi or Hinglish performance."]
+        [f"Text evaluation covers {', '.join(languages)}.",
+         "Hinglish results are specific to the HiFoX benchmark." if len(languages) > 1
+         else "Other languages require evaluation."]
         if benchmark else [
             "The demo model is trained on 24 synthetic wiring examples.",
             "Probabilities on the bundled test split are compressed near 0.5.",
@@ -94,16 +146,13 @@ def _model_info() -> dict[str, Any]:
                 "Flan-T5 explanation policy with DPO preference alignment (implemented, untrained here)",
             ],
         },
-        "supported_languages": ["English"] if benchmark else [
-            "English",
-            "Hindi (Devanagari and romanised)",
-            "Hindi-English code-mixed (Hinglish)",
-        ],
+        "supported_languages": languages,
         "modalities": {
             "text": True,
             "context": True,
-            "image": False,
-            "image_note": "No vision model is trained or evaluated; image inputs are validated but not analysed.",
+            "image": meme_available,
+            "image_note": "Research pilot for English memes with a supplied caption."
+            if meme_available else "Image file validation is available.",
         },
         "explanation_methods": ["lime", "occlusion"],
         "evaluation": {
@@ -198,45 +247,32 @@ def create_app() -> FastAPI:
 
     @app.post("/api/vision-check", dependencies=[Depends(rate_limit)])
     def vision_check(image: UploadFile = File(...)) -> dict[str, Any]:
-        """Validate an uploaded image, then refuse to pretend to analyse it.
-
-        No vision model is trained, so this endpoint never fabricates a
-        prediction. It exists to exercise safe upload handling: type check, size
-        cap, a real decode attempt, and guaranteed temp-file cleanup.
-        """
-        if image.content_type not in IMAGE_FORMATS:
-            raise HTTPException(status_code=415, detail=f"Unsupported image type: {image.content_type}")
-
-        try:
-            from PIL import Image
-
-            # FastAPI has already spooled the upload. Decode it in the route's worker thread.
-            total = image.file.seek(0, os.SEEK_END)
-            if total > MAX_IMAGE_BYTES:
-                raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit")
-            image.file.seek(0)
-            with Image.open(image.file) as img:
-                width, height = img.size
-                fmt = img.format
-                if fmt != IMAGE_FORMATS[image.content_type]:
-                    raise HTTPException(status_code=415, detail="Image contents do not match the file type")
-                img.load()
-        except HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=400, detail="File is not a decodable image") from exc
-        finally:
-            image.file.close()
-
+        """Validate the uploaded file without running classification."""
+        decoded, fmt, total = _read_image(image)
         return {
             "received_bytes": total,
-            "width": width,
-            "height": height,
+            "width": decoded.width,
+            "height": decoded.height,
             "format": fmt,
             "analyzed": False,
             "status": "vision_not_available",
-            "message": "Image validated. Image classification is unavailable.",
+            "message": "Image validated.",
         }
+
+    @app.post("/api/meme-predict", dependencies=[Depends(rate_limit)])
+    def meme_predict(image: UploadFile = File(...), caption: str = Form(..., max_length=5000)):
+        config = get_config()
+        output = _meme_output(config)
+        if output is None:
+            raise HTTPException(status_code=503, detail="Meme classification is unavailable in this profile.")
+        if not caption.strip():
+            raise HTTPException(status_code=422, detail="Enter the caption shown in the meme.")
+        decoded, _, _ = _read_image(image)
+        try:
+            model = _load_meme_pilot(output, Path(config["meme_encoder_dir"]))
+            return model.explain(decoded, caption)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=503, detail="Meme model could not be loaded.") from exc
 
     @app.get("/api/evaluation")
     def evaluation() -> dict[str, Any]:
@@ -283,6 +319,9 @@ def create_app() -> FastAPI:
             if get_config().get("benchmark_name") == "HateXplain"
             else "python experiments/run_experiments.py --config configs/default.yaml"
         )
+        meme_output = _meme_output(get_config())
+        if meme_output is not None:
+            out["available"]["meme_pilot"] = load_json(meme_output / "evaluation.json")
         return out
 
     @app.post("/api/feedback", response_model=FeedbackResponse, status_code=201, dependencies=[Depends(rate_limit)])
