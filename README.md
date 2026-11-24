@@ -138,6 +138,11 @@ than five tokens, mean occlusion comprehensiveness was 0.096 versus 0.031 for a 
 mask. With only the five selected tokens retained, mean predicted-class probability was 0.832
 versus 0.757 for five random tokens. The reports record the checkpoint and test checksums.
 
+Run `python experiments/evaluate_public_baseline.py --config configs/hatexplain_baseline.yaml --analysis ablation`
+for the fixed feature comparison. Uncalibrated character, word, and union variants achieved test
+macro F1 of 0.723, 0.792, and 0.793. The group-calibrated union achieved 0.792. Its ECE was 0.020
+versus 0.104 for the uncalibrated union. The calibration procedure also ensembles fold models.
+
 ### Synthetic diagnostics
 
 Run `python experiments/run_experiments.py` to regenerate. Generated on the bundled diagnostic data.
@@ -231,9 +236,15 @@ python scripts/run_pipeline.py --config configs/cpu.yaml --stage classifier   # 
 python scripts/run_pipeline.py --config configs/default.yaml --stage dpo      # Flan-T5 + DPO
 ```
 
-Transformer training now uses **class-weighted cross-entropy** (inverse frequency, normalised to mean 1),
-best-checkpoint selection, and early stopping. The DPO sequence log-probability uses the correct
-encoder–decoder shift; a regression test pins it.
+Transformer training uses **class-weighted cross-entropy**, best-checkpoint selection, and early stopping.
+For DPO, set `dpo.preferences_path` to a separate JSONL file of human-reviewed training pairs. Each row needs
+`id`, `text`, distinct `chosen_explanation` and `rejected_explanation` strings, `review_status: accepted`,
+and a pseudonymous `reviewer_id`. An optional `context` field supplies conversation context. Use source
+posts from the training split and reserve separate reviewed pairs for explanation evaluation.
+
+The T5 completion score matches its teacher-forced loss and includes the first target token. Successful
+DPO runs save the explanation policy and `training_history.json` together under `checkpoints/dpo_policy/`.
+The history includes epoch loss, pair counts and a checksum of the reviewed input file.
 
 **Hardware guidance:** the shipped baseline and the whole test suite run on CPU in well under a minute.
 `configs/cpu.yaml` (DistilBERT-multilingual + Flan-T5-small) needs roughly 8 GB RAM and no GPU but will be
@@ -324,4 +335,9 @@ slides/                   defense deck
 
 ## Citation
 
-See `paper/acl_paper.tex` and `paper/references.bib`.
+See `paper/acl_paper.tex` and `paper/references.bib`. The current project deck is
+`slides/presentation.html`. The milestone deck is the historical review.
+
+To build the paper, place the TeX source, bibliography, `acl.sty` and `acl_natbib.bst` in a build directory
+and run `tectonic --keep-logs acl_paper.tex` there. The verified build used Tectonic 0.17.0 and the
+[ACL style at revision d5adc82](https://github.com/acl-org/acl-style-files/tree/d5adc823ff0f80f98c80405ca0ab66c68e684409).

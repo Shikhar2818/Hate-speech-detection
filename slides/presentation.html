@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hate Speech Detection through XAI and Reward-Optimized LLMs</title>
+  <title>HateXAI | Explainable Hate Speech Detection with Human Review</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -41,10 +41,11 @@
   <div class="deck">
     <section>
       <div class="pill">Bennett University · NLP Project</div>
-      <h1>Hate Speech Detection through Explainable AI and Reward-Optimized LLMs</h1>
+      <h1>Explainable Hate Speech Detection with Human Review</h1>
+      <p>Shikhar Verma, Bennett University</p>
       <p class="muted">Instructor: Dr. Pradeepika Verma · N2-WS-062 · pradeepika.verma@bennett.edu.in</p>
-      <p>An interpretable, multilingual, optionally multimodal moderation system that classifies posts and explains why.</p>
-      <div class="footer">Scroll or use PageDown · 12 slides</div>
+      <p>An English hate speech baseline with token attributions and a human-review outcome.</p>
+      <div class="footer">Scroll or use PageDown</div>
     </section>
 
     <section>
@@ -98,54 +99,52 @@
     </section>
 
     <section>
-      <h2>Reward-optimized LLM</h2>
-      <p>A seq2seq policy (Flan-T5) generates <span class="eq">HATE / NON_HATE</span> plus a short justification.</p>
-      <p>Reward combines correctness, token overlap (faithfulness), length, and style.</p>
+      <h2>Rationale preference training</h2>
+      <p>The implemented trainer updates a Flan-T5 explanation policy from chosen and rejected rationale pairs.</p>
       <p class="eq">L<sub>DPO</sub> = −log σ( β [ log π<sub>θ</sub>(e⁺|x)/π<sub>ref</sub>(e⁺|x) − log π<sub>θ</sub>(e⁻|x)/π<sub>ref</sub>(e⁻|x) ] )</p>
-      <p>Chosen rationales cite a target group and harmful intent. Rejected ones rely on rudeness or unrelated keywords.</p>
+      <p>Human-reviewed pairs are needed for training and evaluation. The classifier weights stay fixed during rationale optimization.</p>
     </section>
 
     <section>
       <h2>Implementation</h2>
       <div class="grid">
         <div class="card">Python package <code>hatexai</code></div>
-        <div class="card">Synthetic multilingual JSONL for a CPU dry run</div>
-        <div class="card">TF-IDF baseline + XLM-R classifier + DPO trainer</div>
-        <div class="card">FastAPI backend + plain HTML/CSS/JS dashboard (no Streamlit)</div>
+        <div class="card">Pinned HateXplain release with duplicate-aware splits</div>
+        <div class="card">Trained word and character TF-IDF baseline</div>
+        <div class="card">FastAPI dashboard with explanation, review, and evaluation</div>
       </div>
-      <p class="footer">Public data adapters: HateXplain, HASOC, Hateful Memes / MMHS150K.</p>
+      <p class="footer">HASOC and Hateful Memes require authorized local copies for verification.</p>
     </section>
 
     <section>
-      <h2>Evaluation — measured, not hypothetical</h2>
-      <p class="muted">Reproduce with <code>python experiments/run_experiments.py</code>.</p>
+      <h2>Held-out results on HateXplain</h2>
+      <p class="muted">1,924 English posts from the published test split</p>
       <div class="grid">
-        <div class="card"><strong>Baseline (char, legacy)</strong><br/>test acc 0.667 · probe acc 0.639</div>
-        <div class="card"><strong>Improved (word+char, calibrated)</strong><br/>test acc 1.000 · probe acc 0.750 · ECE 0.271</div>
-        <div class="card"><strong>Trade-off</strong><br/>calibration cuts Brier 0.20 → 0.09; ECE rises without Platt scaling</div>
+        <div class="card"><strong>Binary classification</strong><br/>Macro F1 0.792<br/>Accuracy 0.832</div>
+        <div class="card"><strong>Binary error rates</strong><br/>False positives 8.2%<br/>False negatives 36.2%</div>
+        <div class="card"><strong>Human review</strong><br/>284 posts routed to review (14.8%)</div>
+        <div class="card"><strong>Attribution check</strong><br/>Removing five selected tokens reduced predicted probability by 0.096 on average. Random removal reduced it by 0.031.</div>
       </div>
-      <p>Test split is n = 6, so only the probe set (n = 36, adversarial) is informative — and it still fails on quoted hate and counterspeech.</p>
+      <p>The classifier and review thresholds were fixed before testing. The README records how to reproduce the run with <code>configs/hatexplain_baseline.yaml</code>.</p>
     </section>
 
     <section>
-      <h2>Evaluation plan</h2>
+      <h2>Remaining evaluations</h2>
       <ul>
-        <li>Classification: accuracy, macro-F1, per-class F1, AUROC, confusion matrix.</li>
-        <li>Calibration: Brier score and expected calibration error (ECE).</li>
-        <li>Decision: cost-weighted threshold + three-way hate / non-hate / needs-review.</li>
-        <li>Robustness: author-constructed adversarial probe set, per category.</li>
-        <li>Explanation: comprehensiveness and sufficiency under masking.</li>
-        <li>Fairness: macro-F1 and FPR/FNR by language, with small-group guards.</li>
+        <li>Measure language-specific errors on held-out English, Hindi, and code-mixed posts.</li>
+        <li>Compare text-only and multimodal models on a licensed meme dataset.</li>
+        <li>Test quoted hate and counterspeech on public held-out examples.</li>
+        <li>Compare explanations before and after preference training with independent human review.</li>
       </ul>
     </section>
 
     <section>
-      <h2>What is deliberately not claimed</h2>
+      <h2>Scope of the evidence</h2>
       <ul>
-        <li>No imagery or meme analysis — no vision model is trained or evaluated.</li>
-        <li>No headline benchmark numbers — the shipped corpus is a 30-record wiring set.</li>
-        <li>No "reinforcement learning" label: the reward loop is offline DPO over rationale preferences.</li>
-        <li>Attribution is not evidence of intent, and generated rationales are shown separately from model evidence.</li>
+        <li>The public evaluation covers English HateXplain posts.</li>
+        <li>Hindi, code-mixed, and multimodal performance require held-out evaluation.</li>
+        <li>Flan-T5 rationale alignment awaits human-reviewed preferences.</li>
+        <li>The interface shows which tokens influenced the model score. Human reviewers assess intent.</li>
       </ul>
     </section>
 
@@ -172,7 +171,7 @@
       <h2>Thank you</h2>
       <p>Questions and discussion.</p>
       <p class="muted">HateXAI · Bennett University · Guided by Dr. Pradeepika Verma</p>
-      <p>Quick start: <code>python experiments/run_experiments.py</code> then <code>uvicorn backend.main:app</code> and open the frontend at the same origin.</p>
+      <p>The README includes commands for reproducing the English benchmark and launching its FastAPI dashboard.</p>
     </section>
   </div>
 </body>
