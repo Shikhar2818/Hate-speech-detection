@@ -1,5 +1,19 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## English and Hinglish decision check
+
+Scored 20 matched English and Hinglish diagnostic pairs and replayed all 40 inputs through both
+explanation methods. The two methods produced identical scores and moderation decisions.
+The active profile flags hate at 24.19% and routes scores above 14.19% and below 24.19% to review.
+The diagnostic set exposed missed exclusionary posts and false flags on neutral identity mentions
+and counterspeech. These hand-written examples are troubleshooting cases.
+
+On the checksummed held-out splits, the active review policy cleared 40 of 594 labeled English hate
+posts and 21 of 806 labeled Hinglish hate posts. It flagged 357 of 1,330 English non-hate posts and
+561 of 1,029 Hinglish non-hate posts. Review outcomes are counted separately in the local diagnostic
+report under `outputs/app-check/bilingual-diagnostics/`. The Analyze page now displays a single
+hate score and the moderation cutoffs alongside the verdict.
+
 ## Local multilingual, context, and meme experiments (2026-11-24)
 
 The `english_hinglish.yaml` profile serves the calibrated TF-IDF model trained on HateXplain and

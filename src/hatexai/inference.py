@@ -131,7 +131,7 @@ class LinearHateService:
         # correctness term to 1.0 for every input — see PROJECT_AUDIT.md 3.1.
         if gold_label is not None:
             result["offline_reward"] = heuristic_reward(
-                feats.normalized, rationale, gold_label=gold_label, predicted_label=label
+                result["normalized_text"], rationale, gold_label=gold_label, predicted_label=label
             )
         return result
 

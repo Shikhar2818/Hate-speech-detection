@@ -64,6 +64,17 @@ def test_predict_skips_explanation_generation(client, monkeypatch):
     assert client.post("/api/predict", json={"text": "A community event is scheduled tomorrow."}).status_code == 200
 
 
+def test_offline_reward_uses_the_supplied_gold_label(client):
+    from backend.registry import get_service
+
+    service = get_service()
+    text = "A community event is scheduled tomorrow."
+    label = service.predict(text)["label_id"]
+    correct = service.analyze(text, method="occlusion", gold_label=label)
+    incorrect = service.analyze(text, method="occlusion", gold_label=1 - label)
+    assert correct["offline_reward"] - incorrect["offline_reward"] == pytest.approx(0.5)
+
+
 def test_explain_returns_attributions_and_disclaimer(client):
     response = client.post("/api/explain", json={"text": "These people are vermin.", "method": "occlusion"})
     assert response.status_code == 200

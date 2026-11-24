@@ -75,22 +75,20 @@ function renderResult(result, input) {
     body.append(el("p", { class: "muted small", text: "Posts classified as non-hate can still contain insults or profanity." }));
   }
 
-  // Probability bars
+  // Display the score used by the moderation policy.
   const bars = el("div", { class: "prob-bars" });
-  [
-    ["hate", result.probability_hate, "hate"],
-    ["non-hate", result.probability_non_hate, "non_hate"],
-  ].forEach(([label, value, cls]) => {
-    const fill = el("div", { class: `prob-fill ${cls}` });
-    bars.append(
-      el("div", { class: "prob-row" }, [
-        el("span", { class: "prob-label", text: label }),
-        el("div", { class: "prob-track" }, [fill]),
-        el("span", { class: "prob-value", text: pct(value) }),
-      ])
-    );
-    requestAnimationFrame(() => (fill.style.width = `${Math.max(1, value * 100)}%`));
-  });
+  const fill = el("div", { class: "prob-fill hate" });
+  bars.append(el("div", { class: "prob-row" }, [
+    el("span", { class: "prob-label", text: "Hate score" }),
+    el("div", { class: "prob-track" }, [fill]),
+    el("span", { class: "prob-value", text: pct(result.probability_hate) }),
+  ]));
+  requestAnimationFrame(() => (fill.style.width = pct(result.probability_hate)));
+  if (state.operating) {
+    const { low, high } = state.operating;
+    bars.append(el("p", { class: "muted small",
+      text: `Scores at or above ${pct(high)} flag Hate. Scores at or below ${pct(low)} show Non-hate. Scores in between go to review.` }));
+  }
   body.append(bars);
 
   // Uncertainty + faithfulness tiles
@@ -110,11 +108,7 @@ function renderResult(result, input) {
 
   const faith = exp.faithfulness || {};
   body.append(
-    el("div", { class: "grid grid-3", style: "margin-top:16px" }, [
-      el("div", { class: "metric-tile" }, [
-        el("div", { class: "k", text: "Binary prediction confidence" }),
-        el("div", { class: "v", text: pct(result.confidence) }),
-      ]),
+    el("div", { class: "grid grid-2", style: "margin-top:16px" }, [
       el("div", { class: "metric-tile" }, [
         el("div", { class: "k", text: "Comprehensiveness" }),
         el("div", { class: "v", text: num(faith.comprehensiveness, 3) }),
@@ -133,14 +127,13 @@ function renderResult(result, input) {
     el("p", { class: "muted small", text: "Red pushes toward hate; green pushes toward non-hate. Opacity reflects attribution magnitude." })
   );
 
-  // Evidence + rationale (kept visually separate: evidence is model-derived)
+  // Keep the moderation verdict and token evidence visible in the same result.
   body.append(el("h3", { style: "margin-top:20px", text: "Model-derived evidence" }));
   body.append(
     el("div", { class: "chips" }, (exp.top_evidence || []).map((t) => el("span", { class: "chip", text: t })))
   );
-  body.append(el("h3", { style: "margin-top:20px", text: "Attribution summary" }));
-  body.append(el("div", { class: "rationale", text: exp.rationale }));
-  body.append(el("div", { class: "disclaimer", style: "margin-top:12px", text: exp.disclaimer }));
+  body.append(el("div", { class: "disclaimer", style: "margin-top:12px",
+    text: "The highlights explain which tokens changed the score. A human reviewer can assess intent and context." }));
 
   showAlert($("#form-alert"), "ok", "Analysis complete.");
   $("#report-btn").classList.remove("hidden");

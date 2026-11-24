@@ -16,7 +16,8 @@ DEFAULT_FP_COST = 1.0
 def decision_three_way(prob_hate: float, low: float, high: float) -> str:
     """Map a probability to hate / non_hate / needs_review.
 
-    ``low <= p <= high`` is the abstention band handed to a human reviewer.
+    Scores strictly between low and high go to human review. The high cutoff
+    takes precedence if both thresholds are equal.
     """
     if low > high:
         raise ValueError("low threshold must be <= high threshold")
