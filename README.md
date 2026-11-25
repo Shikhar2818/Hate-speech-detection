@@ -471,3 +471,9 @@ See `paper/acl_paper.tex` and `paper/references.bib`. The current project deck i
 To build the paper, place the TeX source, bibliography, `acl.sty` and `acl_natbib.bst` in a build directory
 and run `tectonic --keep-logs acl_paper.tex` there. The verified build used Tectonic 0.17.0 and the
 [ACL style at revision d5adc82](https://github.com/acl-org/acl-style-files/tree/d5adc823ff0f80f98c80405ca0ab66c68e684409).
+
+The regular build reports the English HateXplain benchmark. The internal project review build
+uses `hatexai_current.tex` and `internal_progress.tex` in `outputs/paper-current/`. Build
+it there with `tectonic --keep-logs hatexai_current.tex`. The internal build includes the
+bilingual, context, transformer, meme and attribution results. Retain the HiFoX publication
+restriction when sharing the work outside internal project review.

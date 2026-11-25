@@ -26,8 +26,20 @@
 \begin{document}
 \maketitle
 
+\ifdefined\HateXAIInternal
+\begin{center}
+\textbf{Internal project review draft}\\
+25 November 2026
+\end{center}
+\fi
+
 \begin{abstract}
-We present \textbf{HateXAI}, a prototype for hate speech detection with token attribution and an explicit human-review outcome. We fit a calibrated word and character TF-IDF classifier on the English HateXplain corpus. Duplicate-aware preparation preserves all published test IDs, removes overlapping development examples, and keeps duplicate groups together during calibration. On 1,924 held-out posts, the baseline reaches 0.792 macro F1 and 0.832 accuracy. At the binary decision threshold, the false-negative rate is 0.362. A cost-weighted policy selected on validation routes 14.8\% of test posts to human review. The application exposes LIME and occlusion attributions. Multilingual classification, vision fusion, and preference optimization of generated explanations remain unevaluated extensions.
+We present \textbf{HateXAI}, a prototype for hate speech detection with token attribution and an explicit human-review outcome. A calibrated word and character TF-IDF classifier reaches 0.792 macro F1 and 0.832 accuracy on 1,924 held-out English HateXplain posts. A validation-selected policy routes 14.8\% of those posts to human review. The application exposes LIME and occlusion attributions.
+\ifdefined\HateXAIInternal
+On 3,759 held-out English and Hinglish posts, an expanded TF-IDF baseline reaches 0.779 macro F1 and 0.800 accuracy. In a matched pilot, TF-IDF scores 0.617 macro F1 and XLM-RoBERTa scores 0.581. The combination of image and caption features reaches 0.683 macro F1 on 57 held-out English memes. The transformer serves Integrated Gradients and SHAP, and pretrained Flan-T5 ranks evidence-grounded rationale candidates. Preference optimization awaits human-reviewed pairs.
+\else
+The manuscript reports the English benchmark. Other experiments are maintained as internal project evaluations. Preference optimization awaits human-reviewed pairs.
+\fi
 \end{abstract}
 
 \section{Introduction}
@@ -39,9 +51,9 @@ Low-resource and code-mixed settings make the problem harder. HASOC evaluates ha
 We address three gaps together:
 
 \begin{enumerate}
-    \item \textbf{Representation.} Model a post as \(x_i=\{T_i,V_i,C_i\}\) and learn \(f_\theta(x_i)\rightarrow y_i\).
+    \item \textbf{Representation.} Model a post as \(x_i=\{T_i,V_i,C_i\}\) and learn a classifier for the modalities available in each experiment.
     \item \textbf{Transparency.} Attach token-level and natural-language explanations whose faithfulness can be measured \cite{ribeiro2016lime,jacovi2020faithfulness}.
-    \item \textbf{Alignment.} Use preference optimization \cite{rafailov2023dpo} so generated rationales match moderator-preferred explanations rather than fluent but unfaithful text.
+    \item \textbf{Alignment.} Develop a preference-training procedure \cite{rafailov2023dpo} for explanations rated by human reviewers.
 \end{enumerate}
 
 \paragraph{Contributions.}
@@ -54,7 +66,7 @@ We address three gaps together:
 \section{Related Work}
 
 \paragraph{Hate speech detection.}
-Early systems used bag-of-words and character n-grams \cite{davidson2017hate,zampieri2019olid}. Transformer models such as HateBERT improve in-domain English accuracy \cite{caselli2021hatebert} but transfer poorly to code-mixed Hindi--English. HateXplain adds human rationales, enabling explanation-aware training \cite{mathew2021hatexplain}. Implicit hate---abuse that avoids an explicit slur---remains difficult and is benchmarked separately \cite{elsherief2021latent}.
+Early systems used bag-of-words and character n-grams \cite{davidson2017hate,zampieri2019olid}. HateBERT evaluates domain-adapted transformers for English abuse detection \cite{caselli2021hatebert}. HateXplain adds human rationales, enabling explanation-aware training \cite{mathew2021hatexplain}. Implicit hate, which can avoid explicit slurs, is benchmarked separately \cite{elsherief2021latent}.
 
 \paragraph{Multilingual and multimodal abuse.}
 XLM-R provides strong cross-lingual initialization \cite{conneau2020xlmr}, and production systems now deploy character-level multilingual transformers \cite{lees2022perspective}. HASOC and related FIRE tasks target Indo-European hate and offense \cite{mandl2019hasoc}. The Hateful Memes challenge showed that unimodal models miss image--text interactions \cite{kiela2020hatefulmemes,gomez2020exploring}; CLIP supplies aligned visual features \cite{radford2021clip}.
@@ -75,7 +87,7 @@ where \(T_i\) is textual content (possibly multilingual or code-mixed), \(V_i\) 
 \begin{equation}
 f_\theta(x_i) \rightarrow y_i \in \{0,1\},
 \end{equation}
-with \(y_i=1\) denoting hateful content. We additionally produce an explanation \(e_i\) and a reward \(r(x_i,e_i,y_i)\).
+with \(y_i=1\) denoting hateful content. The service returns evidence for a prediction. Offline rationale scoring can additionally use a reference label.
 
 We follow the distinction between hate speech and other offensive language \cite{davidson2017hate}. Human-reviewed preference pairs for the rationale policy remain to be collected.
 
@@ -84,18 +96,18 @@ We follow the distinction between hate speech and other offensive language \cite
 \subsection{Preprocessing}
 URLs and mentions are canonicalized. Language ID and a script-mixing heuristic flag code-mixed posts. Text and context are concatenated with explicit markers so the encoder can attend to \(C_i\) separately from \(T_i\).
 
-\subsection{Multimodal classifier}
-XLM-R encodes \(T_i\) and \(C_i\). Optional CLIP image features encode \(V_i\) and are frozen to limit compute. A gated fusion block learns non-negative weights \((\alpha_t,\alpha_v,\alpha_c)\) over projected modalities:
+\subsection{Gated fusion design}
+The experimental architecture projects XLM-R text and context representations and optional CLIP image features into a common space. A gated fusion block computes weights over the three projections:
 \begin{equation}
 h = \alpha_t\,W_t t + \alpha_v\,W_v v + \alpha_c\,W_c c.
 \end{equation}
-A small MLP maps \(h\) to class logits. Training uses class-weighted cross-entropy, AdamW, and linear warmup.
+A small MLP computes class logits. The training pipeline joins text and context before encoding and reuses the text representation in the context slot when separate context tokens are absent. It uses class-weighted cross-entropy, AdamW, and linear warmup. The full gated model awaits evaluation.
 
 \subsection{Explainable AI}
-For a post \(x\), LIME perturbs tokens and fits a local linear model \cite{ribeiro2016lime}. Attention attribution averages last-layer heads from the CLS token to each position. Integrated-gradients hooks are provided for embedding-space paths. Counterfactual hints list high-risk cues whose removal is expected to lower \(P(y=1)\). Top-\(k\) tokens are verbalized as a rationale.
+For a post \(x\), LIME perturbs tokens and fits a local linear model \cite{ribeiro2016lime}. Delete-one occlusion measures the change in the hate probability when an individual token is removed. We measure attribution faithfulness using masking controls and show the highest-ranked token contributions in the interface.
 
 \subsection{Reward and DPO}
-A heuristic reward used for ranking and diagnostics is
+A heuristic reward used for offline diagnostics is
 \begin{equation}
 r = 0.5\,r_{\mathrm{corr}} + 0.3\,r_{\mathrm{faith}} + 0.1\,r_{\mathrm{len}} + 0.1\,r_{\mathrm{style}},
 \end{equation}
@@ -109,10 +121,10 @@ s_\theta(e,x)&=\ell_{\pi_\theta}(e\mid x)-\ell_{\pi_{\mathrm{ref}}}(e\mid x), \\
  -\log\sigma\!\left(\beta[s_\theta(e^+,x)-s_\theta(e^-,x)]\right),
 \end{aligned}
 \end{equation}
-where \(e^+\) is the chosen explanation and \(e^-\) the rejected one \cite{rafailov2023dpo}. In our implementation the policy is a seq2seq LLM (Flan-T5) prompted to emit \texttt{HATE}/\texttt{NON\_HATE} plus a short justification.
+where \(e^+\) is the chosen explanation and \(e^-\) the rejected one \cite{rafailov2023dpo}. The Flan-T5 policy compares two explanations for the same reviewed prompt. The classifier remains fixed during preference optimization. Human-reviewed training and test pairs are pending, so the paper reports no optimized policy.
 
 \subsection{Fairness}
-Language and code-mix comparisons require adequate held-out support in each group. The benchmark evaluated here carries a single English language designation. The observed error rates are aggregate values, and dialect-level errors require additional annotation \cite{sap2019racial,borkan2019nuanced}.
+Language and code-mix comparisons require adequate held-out support. The initial HateXplain benchmark carries a single English language designation. Dialect-level errors require additional annotation \cite{sap2019racial,borkan2019nuanced}.
 
 \section{Experimental Setup}
 
@@ -122,7 +134,7 @@ We use the published HateXplain splits \cite{mathew2021hatexplain} at a pinned s
 \paragraph{Systems.}
 \begin{itemize}
     \item \textbf{Evaluated baseline.} A union of word and character n-gram TF-IDF features with class-balanced logistic regression. Three stratified, group-aware training folds fit sigmoid calibration.
-    \item \textbf{Implemented extensions.} XLM-R for text and context, gated fusion with CLIP, and Flan-T5 rationale preference training.
+    \item \textbf{Research components.} XLM-R for text and context, a separate image experiment, gated fusion with CLIP, and Flan-T5 rationale preference training.
 \end{itemize}
 
 \paragraph{Metrics.}
@@ -159,6 +171,8 @@ The validation-selected threshold is 0.202 with a review interval of approximate
 \paragraph{Error analysis.}
 Among the gold negative posts, the classifier predicts hate for 43 of 782 posts originally labeled \textit{normal} (5.5\%) and 66 of 548 originally labeled \textit{offensive} (12.0\%). The script heuristic detects no mixed-script posts in the test split.
 
+We also break down binary errors by the corpus's annotated targets. For example, posts with the source target \textit{Women} (147 posts) have FPR 1.8\% and FNR 55.6\%, while posts with \textit{African} (315 posts) have FPR 28.1\% and FNR 19.9\%. The targets describe the content of posts and can overlap. The rates characterize this benchmark and do not measure a change from a bias-reduction intervention.
+
 \paragraph{Feature and calibration comparison.}
 Three fixed variants trained without calibration achieve test macro F1 of 0.723 for character features, 0.792 for word features, and 0.793 for their union. The calibrated union achieves 0.792 macro F1. Its ECE is 0.020, compared with 0.104 for the uncalibrated union. This comparison measures the full cross-validated calibration procedure, which also averages predictions across fitted folds.
 
@@ -166,15 +180,24 @@ Three fixed variants trained without calibration achieve test macro F1 of 0.723 
 We evaluate the 1,812 test posts with more than five tokens. For each predicted class, we rank tokens by absolute delete-one occlusion score and select the top five. The mean probability drop after removing these tokens is 0.096, compared with 0.031 for five tokens sampled uniformly per post with seed 42. Keeping only the selected tokens in their original order retains mean predicted-class probability of 0.832, compared with 0.757 for the same random control. These perturbation results characterize the baseline's sensitivity to its highlighted tokens.
 
 \paragraph{Limits of the evaluation.}
-The public results cover one corpus and one classifier. Public robustness data are needed to quantify errors on quoted hate and counterspeech \cite{gligoric2024use}. The bundled synthetic examples and author-constructed probes remain software diagnostics. Transformer, vision, and DPO comparisons remain open.
+This English benchmark covers one corpus and one model family. Public robustness data are needed to quantify errors on quoted hate and counterspeech \cite{gligoric2024use}. The bundled synthetic examples and author-constructed probes serve as software diagnostics.
+
+\ifdefined\HateXAIInternal
+\input{internal_progress.tex}
+\fi
 
 \section{Ethics and Limitations}
 
-Hate-speech annotation is culturally situated. A model trained in one community may encode that community's prejudices \cite{sap2019racial}, and abusive-language datasets are themselves biased toward particular topics and dialects \cite{wiegand2019biased}. We do not recommend fully automated penalties. Explanations can be \emph{plausible but unfaithful}; we therefore measure probability drop under masking rather than only human likert scores \cite{jacovi2020faithfulness}. Synthetic data in the repository is for software tests and must not be treated as a demographic sample. Images and user identifiers, if added later, require IRB/ethics clearance and dataset licenses. Dual-use risk: the same features that detect hate can be inverted to write it; we release classifiers and explainers, not generative attack tools.
+Hate-speech annotation is culturally situated. A classifier can learn biases tied to the populations, topics, and dialects represented in its training data \cite{sap2019racial,wiegand2019biased}. Model outputs should support human review before punitive action. Masking tests measure a model's response to feature removal and can help assess explanations \cite{jacovi2020faithfulness}. Determining author intent requires human interpretation and context. Feedback is recorded for review. Training requires a separately curated dataset. Dataset terms govern access and redistribution.
 
 \section{Conclusion}
 
-HateXAI establishes a reproducible English hate speech baseline and serves its calibrated scores, token attributions, and human-review outcome. The held-out error rates motivate category-specific analysis before operational use. Authorized multilingual and image datasets, together with independently reviewed rationale preferences, are needed to evaluate the remaining components.
+HateXAI establishes a reproducible English hate speech baseline and serves calibrated scores, token attributions, and a human-review outcome.
+\ifdefined\HateXAIInternal
+The internal comparisons extend measurement to English and Hinglish text, text with parent context, and captioned English memes. The results support the full-data TF-IDF model as the default and identify weaknesses on exclusionary language, context, and false flags. Full-corpus transformer training, gated fusion evaluation, and reviewed preference training remain pending.
+\else
+The held-out error rates motivate category-specific analysis and independent robustness evaluation.
+\fi
 
 \section*{Acknowledgements}
 We thank Dr.\ Pradeepika Verma for guidance. Office: N2-WS-062.

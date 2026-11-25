@@ -1,5 +1,13 @@
 # PROJECT_AUDIT — Hate Speech Detection through Explainable AI and Reward-Optimized LLMs
 
+## Research paper status
+
+The internal ACL-format review draft includes the completed bilingual, matched transformer,
+context, English meme, and explanation experiments. The public-facing build reports the
+earlier English HateXplain benchmark. HiFoX requires author permission for publication.
+The internal draft describes frozen-encoder meme results separately from the unevaluated
+gated fusion architecture and records that reviewed preference pairs are still needed for DPO.
+
 ## XLM-RoBERTa, attribution and explanation upgrade
 
 The advanced profile uses the existing canonical post/context fusion and saves the selected
@@ -90,8 +98,8 @@ hate score and the moderation cutoffs alongside the verdict.
 
 The `english_hinglish.yaml` profile serves the calibrated TF-IDF model trained on HateXplain and
 HiFoX Task A. Held-out reports are under `outputs/english-hinglish-v1/eval/`. HiFoX is available for
-local research. Its authors require permission for publication, so the paper keeps the earlier
-English-only results. These English and Hinglish cohorts come from different corpora.
+local research. Its authors require permission for publication, so the public-facing paper
+keeps the earlier English-only results. These English and Hinglish cohorts come from different corpora.
 
 The CADD experiment fits the same model family twice, with and without the parent post's title
 and body. Shared parent text and duplicate comments are kept out of lower-priority splits.
